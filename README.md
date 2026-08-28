@@ -29,6 +29,8 @@ Nodes are located under the **`phaulty nodes` &rsaquo; `Muse`** category:
 - **Meta Muse Image (`MuseImageNode`)**: Text-to-image and image-to-image generation. Outputs the generated `IMAGE`, `response_id`, and `reasoning_summary`.
 - **Meta Muse Image Editor / Refiner (`MuseImageEditorNode`)**: Iterative multi-turn image editing.
 - **Meta Muse Show Text / Reasoning (`MuseShowTextNode`)**: Lightweight canvas display node to view reasoning logs and IDs.
+- **Meta Muse Mode Switch (`MuseSwitchNode`)**: Routes between initial generation and iterative editor outputs to drive a single `SaveImage` / `MuseShowTextNode`, avoiding duplicate saved images.
+
 
 ---
 

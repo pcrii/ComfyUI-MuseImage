@@ -406,14 +406,71 @@ class MuseShowTextNode:
         return {"ui": {"text": [display_str]}, "result": (display_str,)}
 
 
+class MuseSwitchNode:
+    """
+    Switches between initial generation and iterative editor outputs.
+    Allows using a single SaveImage and ShowText node, eliminating duplicate saved images.
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "mode": (["generate", "edit"], {"default": "generate"}),
+            },
+            "optional": {
+                "generate_image": ("IMAGE", {"lazy": True}),
+                "generate_reasoning": ("STRING", {"lazy": True, "forceInput": True}),
+                "edit_image": ("IMAGE", {"lazy": True}),
+                "edit_reasoning": ("STRING", {"lazy": True, "forceInput": True}),
+            },
+        }
+
+    RETURN_TYPES = ("IMAGE", "STRING")
+    RETURN_NAMES = ("IMAGE", "reasoning_summary")
+    FUNCTION = "route"
+    CATEGORY = "phaulty nodes/Muse"
+
+    def check_lazy_status(self, mode: str, **kwargs):
+        prefix = "edit" if mode == "edit" else "generate"
+        needed = []
+        for key in (f"{prefix}_image", f"{prefix}_reasoning"):
+            if key in kwargs:
+                needed.append(key)
+        return needed
+
+    def route(
+        self,
+        mode: str,
+        generate_image: torch.Tensor = None,
+        generate_reasoning: str = "",
+        edit_image: torch.Tensor = None,
+        edit_reasoning: str = "",
+    ):
+        if mode == "edit":
+            img = edit_image if edit_image is not None else generate_image
+            reasoning = edit_reasoning if edit_reasoning else generate_reasoning
+        else:
+            img = generate_image if generate_image is not None else edit_image
+            reasoning = generate_reasoning if generate_reasoning else edit_reasoning
+
+        if img is None:
+            img = torch.zeros((1, 64, 64, 3), dtype=torch.float32)
+
+        return (img, reasoning or "")
+
+
 NODE_CLASS_MAPPINGS = {
     "MuseImageNode": MuseImageNode,
     "MuseImageEditorNode": MuseImageEditorNode,
     "MuseShowTextNode": MuseShowTextNode,
+    "MuseSwitchNode": MuseSwitchNode,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "MuseImageNode": "Meta Muse Image",
     "MuseImageEditorNode": "Meta Muse Image Editor / Refiner",
     "MuseShowTextNode": "Meta Muse Show Text / Reasoning",
+    "MuseSwitchNode": "Meta Muse Mode Switch",
 }
+
