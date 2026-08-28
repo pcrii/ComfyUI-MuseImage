@@ -88,7 +88,7 @@ def _get_base_url() -> str:
 
 def _clean_size(size_str: str) -> str:
     if not size_str:
-        return "1024x1024"
+        return "auto"
     raw = size_str.split()[0].strip().lower()
     valid_sizes = {"1024x1024", "1024x1536", "1536x1024", "auto"}
     if raw in valid_sizes:
@@ -104,7 +104,7 @@ def _clean_size(size_str: str) -> str:
                 return "1024x1024"
         except Exception:
             pass
-    return "1024x1024"
+    return "auto"
 
 
 def _tensor_to_data_url(image_tensor: torch.Tensor) -> str:
@@ -190,12 +190,12 @@ class MuseImageNode:
                 ),
                 "size": (
                     [
+                        "auto",
                         "1024x1024 (Square 1:1)",
                         "1024x1536 (Portrait 2:3)",
                         "1536x1024 (Landscape 3:2)",
-                        "auto",
                     ],
-                    {"default": "1024x1024 (Square 1:1)"},
+                    {"default": "auto"},
                 ),
                 "reasoning_strength": (
                     ["high", "medium", "low"],

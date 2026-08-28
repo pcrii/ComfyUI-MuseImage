@@ -42,3 +42,11 @@ The **Muse Image Editor** node enables stateful, conversational image refinement
 - Set **`mode`** to:
   - **`accumulate_edits`** *(default)*: Chains subsequent prompt edits across executions in the current session without manual ID re-wiring.
   - **`reset_to_incoming_id`**: Discards the session history and restarts refinement from the incoming `previous_response_id`.
+
+---
+
+## Example Workflows
+
+An example workflow is included in the [`example_workflows/`](example_workflows/) folder:
+- **`metamuse-full-workflow.json`**: Complete pipeline showing initial generation (`MuseImageNode`), multi-turn editing (`MuseImageEditorNode`), output switching (`MuseSwitchNode`), and reasoning visualization (`MuseShowTextNode`).
+

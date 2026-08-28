@@ -1,0 +1,494 @@
+{
+  "id": "eb35a45b-b0ed-4b80-8647-4303c18f1fae",
+  "revision": 0,
+  "last_node_id": 9,
+  "last_link_id": 15,
+  "nodes": [
+    {
+      "id": 5,
+      "type": "MuseShowTextNode",
+      "pos": [
+        296.214206924437,
+        237.98444213867137
+      ],
+      "size": [
+        360,
+        353.6558532714844
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "text",
+          "name": "text",
+          "type": "STRING",
+          "link": 15
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "text",
+          "name": "text",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MuseShowTextNode"
+      }
+    },
+    {
+      "id": 6,
+      "type": "SaveImage",
+      "pos": [
+        674.9206393842658,
+        38.860423615556236
+      ],
+      "size": [
+        523.6727977405894,
+        554.8462990500709
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "images",
+          "name": "images",
+          "type": "IMAGE",
+          "link": 14
+        },
+        {
+          "localized_name": "filename_prefix",
+          "name": "filename_prefix",
+          "type": "STRING",
+          "widget": {
+            "name": "filename_prefix"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "images",
+          "name": "images",
+          "type": "IMAGE",
+          "links": null
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        "ComfyUI"
+      ],
+      "widgets_values_named": {
+        "filename_prefix": "ComfyUI"
+      }
+    },
+    {
+      "id": 2,
+      "type": "MuseImageEditorNode",
+      "pos": [
+        -133.03063544771723,
+        324.3151104339926
+      ],
+      "size": [
+        406.87339089133525,
+        268
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "previous_response_id",
+          "name": "previous_response_id",
+          "shape": 7,
+          "type": "STRING",
+          "link": 2
+        },
+        {
+          "localized_name": "reference_image",
+          "name": "reference_image",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "localized_name": "prompt",
+          "name": "prompt",
+          "type": "STRING",
+          "widget": {
+            "name": "prompt"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "reasoning_strength",
+          "name": "reasoning_strength",
+          "type": "COMBO",
+          "widget": {
+            "name": "reasoning_strength"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "mode",
+          "name": "mode",
+          "type": "COMBO",
+          "widget": {
+            "name": "mode"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "override_response_id",
+          "name": "override_response_id",
+          "shape": 7,
+          "type": "STRING",
+          "widget": {
+            "name": "override_response_id"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "model",
+          "name": "model",
+          "shape": 7,
+          "type": "COMBO",
+          "widget": {
+            "name": "model"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "api_key_override",
+          "name": "api_key_override",
+          "shape": 7,
+          "type": "STRING",
+          "widget": {
+            "name": "api_key_override"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "IMAGE",
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            12
+          ]
+        },
+        {
+          "localized_name": "response_id",
+          "name": "response_id",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "localized_name": "reasoning_summary",
+          "name": "reasoning_summary",
+          "type": "STRING",
+          "links": [
+            13
+          ]
+        },
+        {
+          "localized_name": "turn_number",
+          "name": "turn_number",
+          "type": "INT",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MuseImageEditorNode"
+      },
+      "widgets_values": [
+        "",
+        "high",
+        "accumulate_edits",
+        "",
+        "muse-image-1.0",
+        ""
+      ],
+      "widgets_values_named": {
+        "prompt": "",
+        "reasoning_strength": "high",
+        "mode": "accumulate_edits",
+        "override_response_id": "",
+        "model": "muse-image-1.0",
+        "api_key_override": ""
+      }
+    },
+    {
+      "id": 9,
+      "type": "MuseSwitchNode",
+      "pos": [
+        297.21118039217924,
+        39.32269703258177
+      ],
+      "size": [
+        356.7329545454545,
+        154.8335127397017
+      ],
+      "flags": {
+        "collapsed": false
+      },
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "generate_image",
+          "name": "generate_image",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 10
+        },
+        {
+          "localized_name": "generate_reasoning",
+          "name": "generate_reasoning",
+          "shape": 7,
+          "type": "STRING",
+          "link": 11
+        },
+        {
+          "localized_name": "edit_image",
+          "name": "edit_image",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 12
+        },
+        {
+          "localized_name": "edit_reasoning",
+          "name": "edit_reasoning",
+          "shape": 7,
+          "type": "STRING",
+          "link": 13
+        },
+        {
+          "localized_name": "mode",
+          "name": "mode",
+          "type": "COMBO",
+          "widget": {
+            "name": "mode"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "IMAGE",
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            14
+          ]
+        },
+        {
+          "localized_name": "reasoning_summary",
+          "name": "reasoning_summary",
+          "type": "STRING",
+          "links": [
+            15
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MuseSwitchNode"
+      },
+      "widgets_values": [
+        "generate"
+      ],
+      "widgets_values_named": {
+        "mode": "generate"
+      }
+    },
+    {
+      "id": 1,
+      "type": "MuseImageNode",
+      "pos": [
+        -130.00769188538047,
+        47.297356758401136
+      ],
+      "size": [
+        400,
+        224
+      ],
+      "flags": {
+        "collapsed": false
+      },
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "localized_name": "reference_image",
+          "name": "reference_image",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": null
+        },
+        {
+          "localized_name": "prompt",
+          "name": "prompt",
+          "type": "STRING",
+          "widget": {
+            "name": "prompt"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "size",
+          "name": "size",
+          "type": "COMBO",
+          "widget": {
+            "name": "size"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "reasoning_strength",
+          "name": "reasoning_strength",
+          "type": "COMBO",
+          "widget": {
+            "name": "reasoning_strength"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "model",
+          "name": "model",
+          "type": "COMBO",
+          "widget": {
+            "name": "model"
+          },
+          "link": null
+        },
+        {
+          "localized_name": "api_key_override",
+          "name": "api_key_override",
+          "shape": 7,
+          "type": "STRING",
+          "widget": {
+            "name": "api_key_override"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "localized_name": "IMAGE",
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            10
+          ]
+        },
+        {
+          "localized_name": "response_id",
+          "name": "response_id",
+          "type": "STRING",
+          "links": [
+            2
+          ]
+        },
+        {
+          "localized_name": "reasoning_summary",
+          "name": "reasoning_summary",
+          "type": "STRING",
+          "links": [
+            11
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MuseImageNode"
+      },
+      "widgets_values": [
+        "",
+        "auto",
+        "high",
+        "muse-image-1.0",
+        ""
+      ],
+      "widgets_values_named": {
+        "prompt": "",
+        "size": "auto",
+        "reasoning_strength": "high",
+        "model": "muse-image-1.0",
+        "api_key_override": ""
+      }
+    }
+  ],
+  "links": [
+    [
+      2,
+      1,
+      1,
+      2,
+      0,
+      "STRING"
+    ],
+    [
+      10,
+      1,
+      0,
+      9,
+      0,
+      "IMAGE"
+    ],
+    [
+      11,
+      1,
+      2,
+      9,
+      1,
+      "STRING"
+    ],
+    [
+      12,
+      2,
+      0,
+      9,
+      2,
+      "IMAGE"
+    ],
+    [
+      13,
+      2,
+      2,
+      9,
+      3,
+      "STRING"
+    ],
+    [
+      14,
+      9,
+      0,
+      6,
+      0,
+      "IMAGE"
+    ],
+    [
+      15,
+      9,
+      1,
+      5,
+      0,
+      "STRING"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 1.1,
+      "offset": [
+        401.810347163665,
+        255.69045460469445
+      ]
+    }
+  },
+  "version": 0.4
+}
