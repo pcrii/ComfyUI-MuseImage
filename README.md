@@ -30,8 +30,21 @@ Nodes are located under the **`phaulty nodes` &rsaquo; `Muse`** category:
 - **Meta Muse Image Editor / Refiner (`MuseImageEditorNode`)**: Iterative multi-turn image editing.
 - **Meta Muse Show Text / Reasoning (`MuseShowTextNode`)**: Lightweight canvas display node to view reasoning logs and IDs.
 - **Meta Muse Mode Switch (`MuseSwitchNode`)**: Routes between initial generation and iterative editor outputs (`IMAGE`, `reasoning_summary`, and `response_id`) to drive a single `SaveImage` / `MuseShowTextNode`, avoiding duplicate saved images and allowing dynamic response ID file naming.
+- **Meta Muse Image Array (`MuseImageArrayNode`)**: Combines multiple reference images of different resolutions or aspect ratios into an image bundle (`MUSE_IMAGES`) without requiring resizing or cropping. Supports chaining for unlimited reference images.
 
 ---
+
+## Multiple Reference Images
+
+Meta Muse Image supports multiple reference images to guide generation, style, character consistency, and composition.
+
+You can provide multiple reference images in two ways:
+1. **Using `Meta Muse Image Array`**:
+   - Connect up to 4 images of **any different sizes/aspect ratios** directly to `image_1` through `image_4`.
+   - Wire the `image_array` output into `reference_images` on `Meta Muse Image` or `Meta Muse Image Editor`.
+   - To use more than 4 images, chain multiple array nodes using the `image_array` input!
+2. **Standard ComfyUI Batches**:
+   - You can also plug a standard batched tensor (`[B, H, W, C]`) directly into `reference_image`. The node will automatically unpack all images in the batch.
 
 ## Iterative Editing (`accumulate_edits`)
 

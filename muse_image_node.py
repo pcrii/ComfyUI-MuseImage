@@ -108,12 +108,48 @@ def _clean_size(size_str: str) -> str:
 
 
 def _tensor_to_data_url(image_tensor: torch.Tensor) -> str:
-    np_img = 255.0 * image_tensor[0].cpu().numpy()
+    if len(image_tensor.shape) == 4:
+        np_img = 255.0 * image_tensor[0].cpu().numpy()
+    else:
+        np_img = 255.0 * image_tensor.cpu().numpy()
     pil_img = Image.fromarray(np.clip(np_img, 0, 255).astype(np.uint8))
     buffered = io.BytesIO()
     pil_img.save(buffered, format="PNG")
     b64_data = base64.b64encode(buffered.getvalue()).decode("utf-8")
     return f"data:image/png;base64,{b64_data}"
+
+
+def _extract_images(reference_image: torch.Tensor = None, reference_images: list = None) -> list:
+    collected = []
+    if reference_image is not None:
+        if isinstance(reference_image, torch.Tensor):
+            if len(reference_image.shape) == 4:
+                for i in range(reference_image.shape[0]):
+                    collected.append(reference_image[i : i + 1])
+            else:
+                collected.append(reference_image)
+        elif isinstance(reference_image, (list, tuple)):
+            collected.extend(reference_image)
+
+    if reference_images is not None:
+        if isinstance(reference_images, (list, tuple)):
+            for img in reference_images:
+                if isinstance(img, torch.Tensor):
+                    if len(img.shape) == 4 and img.shape[0] > 1:
+                        for i in range(img.shape[0]):
+                            collected.append(img[i : i + 1])
+                    else:
+                        collected.append(img)
+                elif img is not None:
+                    collected.append(img)
+        elif isinstance(reference_images, torch.Tensor):
+            if len(reference_images.shape) == 4:
+                for i in range(reference_images.shape[0]):
+                    collected.append(reference_images[i : i + 1])
+            else:
+                collected.append(reference_images)
+
+    return collected
 
 
 def _bytes_to_tensor(image_bytes: bytes) -> torch.Tensor:
@@ -205,6 +241,7 @@ class MuseImageNode:
             },
             "optional": {
                 "reference_image": ("IMAGE",),
+                "reference_images": ("MUSE_IMAGES",),
                 "api_key_override": ("STRING", {"default": "", "multiline": False}),
             },
         }
@@ -221,6 +258,7 @@ class MuseImageNode:
         reasoning_strength: str,
         model: str = "muse-image-1.0",
         reference_image: torch.Tensor = None,
+        reference_images: list = None,
         api_key_override: str = "",
     ):
         api_key = _get_api_key(api_key_override)
@@ -244,15 +282,16 @@ class MuseImageNode:
             ],
         }
 
-        if reference_image is not None:
-            image_data_url = _tensor_to_data_url(reference_image)
+        images = _extract_images(reference_image, reference_images)
+        if images:
+            content = [{"type": "input_text", "text": prompt}]
+            for img in images:
+                image_data_url = _tensor_to_data_url(img)
+                content.append({"type": "input_image", "image_url": image_data_url})
             payload["input"] = [
                 {
                     "role": "user",
-                    "content": [
-                        {"type": "input_text", "text": prompt},
-                        {"type": "input_image", "image_url": image_data_url},
-                    ],
+                    "content": content,
                 }
             ]
         else:
@@ -295,6 +334,7 @@ class MuseImageEditorNode:
                 "previous_response_id": ("STRING", {"forceInput": True}),
                 "override_response_id": ("STRING", {"default": "", "multiline": False}),
                 "reference_image": ("IMAGE",),
+                "reference_images": ("MUSE_IMAGES",),
                 "model": (["muse-image-1.0"], {"default": "muse-image-1.0"}),
                 "api_key_override": ("STRING", {"default": "", "multiline": False}),
             },
@@ -316,6 +356,7 @@ class MuseImageEditorNode:
         previous_response_id: str = None,
         override_response_id: str = "",
         reference_image: torch.Tensor = None,
+        reference_images: list = None,
         model: str = "muse-image-1.0",
         api_key_override: str = "",
         unique_id: str = "default_editor",
@@ -356,15 +397,16 @@ class MuseImageEditorNode:
             ],
         }
 
-        if reference_image is not None:
-            image_data_url = _tensor_to_data_url(reference_image)
+        images = _extract_images(reference_image, reference_images)
+        if images:
+            content = [{"type": "input_text", "text": prompt}]
+            for img in images:
+                image_data_url = _tensor_to_data_url(img)
+                content.append({"type": "input_image", "image_url": image_data_url})
             payload["input"] = [
                 {
                     "role": "user",
-                    "content": [
-                        {"type": "input_text", "text": prompt},
-                        {"type": "input_image", "image_url": image_data_url},
-                    ],
+                    "content": content,
                 }
             ]
         else:
@@ -467,11 +509,63 @@ class MuseSwitchNode:
         return (img, reasoning or "", resp_id or "")
 
 
+class MuseImageArrayNode:
+    """
+    Combines multiple reference images of different resolutions or aspect ratios
+    into a unified image array/bundle for Meta Muse generation and editing nodes.
+    Supports chaining with other Muse Image Array nodes.
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {},
+            "optional": {
+                "image_1": ("IMAGE",),
+                "image_2": ("IMAGE",),
+                "image_3": ("IMAGE",),
+                "image_4": ("IMAGE",),
+                "image_array": ("MUSE_IMAGES",),
+            },
+        }
+
+    RETURN_TYPES = ("MUSE_IMAGES",)
+    RETURN_NAMES = ("image_array",)
+    FUNCTION = "collect_images"
+    CATEGORY = "phaulty nodes/Muse"
+
+    def collect_images(
+        self,
+        image_1: torch.Tensor = None,
+        image_2: torch.Tensor = None,
+        image_3: torch.Tensor = None,
+        image_4: torch.Tensor = None,
+        image_array: list = None,
+    ):
+        images = []
+        if image_array is not None:
+            if isinstance(image_array, (list, tuple)):
+                images.extend(image_array)
+            elif isinstance(image_array, torch.Tensor):
+                images.append(image_array)
+
+        for img in (image_1, image_2, image_3, image_4):
+            if img is not None:
+                if isinstance(img, torch.Tensor) and len(img.shape) == 4 and img.shape[0] > 1:
+                    for i in range(img.shape[0]):
+                        images.append(img[i : i + 1])
+                else:
+                    images.append(img)
+
+        return (images,)
+
+
 NODE_CLASS_MAPPINGS = {
     "MuseImageNode": MuseImageNode,
     "MuseImageEditorNode": MuseImageEditorNode,
     "MuseShowTextNode": MuseShowTextNode,
     "MuseSwitchNode": MuseSwitchNode,
+    "MuseImageArrayNode": MuseImageArrayNode,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -479,5 +573,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "MuseImageEditorNode": "Meta Muse Image Editor / Refiner",
     "MuseShowTextNode": "Meta Muse Show Text / Reasoning",
     "MuseSwitchNode": "Meta Muse Mode Switch",
+    "MuseImageArrayNode": "Meta Muse Image Array",
 }
 
