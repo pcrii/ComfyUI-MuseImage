@@ -1,0 +1,4 @@
+{
+    "MODEL_API_KEY": "your_meta_model_api_key_here",
+    "MODEL_BASE_URL": "https://api.meta.ai/v1"
+}
