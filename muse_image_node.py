@@ -409,7 +409,8 @@ class MuseShowTextNode:
 class MuseSwitchNode:
     """
     Switches between initial generation and iterative editor outputs.
-    Allows using a single SaveImage and ShowText node, eliminating duplicate saved images.
+    Allows using a single SaveImage and ShowText node, eliminating duplicate saved images,
+    and forwards the active response_id for downstream file naming or reference.
     """
 
     @classmethod
@@ -423,18 +424,20 @@ class MuseSwitchNode:
                 "generate_reasoning": ("STRING", {"lazy": True, "forceInput": True}),
                 "edit_image": ("IMAGE", {"lazy": True}),
                 "edit_reasoning": ("STRING", {"lazy": True, "forceInput": True}),
+                "generate_response_id": ("STRING", {"lazy": True, "forceInput": True}),
+                "edit_response_id": ("STRING", {"lazy": True, "forceInput": True}),
             },
         }
 
-    RETURN_TYPES = ("IMAGE", "STRING")
-    RETURN_NAMES = ("IMAGE", "reasoning_summary")
+    RETURN_TYPES = ("IMAGE", "STRING", "STRING")
+    RETURN_NAMES = ("IMAGE", "reasoning_summary", "response_id")
     FUNCTION = "route"
     CATEGORY = "phaulty nodes/Muse"
 
     def check_lazy_status(self, mode: str, **kwargs):
         prefix = "edit" if mode == "edit" else "generate"
         needed = []
-        for key in (f"{prefix}_image", f"{prefix}_reasoning"):
+        for key in (f"{prefix}_image", f"{prefix}_reasoning", f"{prefix}_response_id"):
             if key in kwargs:
                 needed.append(key)
         return needed
@@ -443,21 +446,25 @@ class MuseSwitchNode:
         self,
         mode: str,
         generate_image: torch.Tensor = None,
+        generate_response_id: str = "",
         generate_reasoning: str = "",
         edit_image: torch.Tensor = None,
+        edit_response_id: str = "",
         edit_reasoning: str = "",
     ):
         if mode == "edit":
             img = edit_image if edit_image is not None else generate_image
             reasoning = edit_reasoning if edit_reasoning else generate_reasoning
+            resp_id = edit_response_id if edit_response_id else generate_response_id
         else:
             img = generate_image if generate_image is not None else edit_image
             reasoning = generate_reasoning if generate_reasoning else edit_reasoning
+            resp_id = generate_response_id if generate_response_id else edit_response_id
 
         if img is None:
             img = torch.zeros((1, 64, 64, 3), dtype=torch.float32)
 
-        return (img, reasoning or "")
+        return (img, reasoning or "", resp_id or "")
 
 
 NODE_CLASS_MAPPINGS = {

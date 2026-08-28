@@ -29,8 +29,7 @@ Nodes are located under the **`phaulty nodes` &rsaquo; `Muse`** category:
 - **Meta Muse Image (`MuseImageNode`)**: Text-to-image and image-to-image generation. Outputs the generated `IMAGE`, `response_id`, and `reasoning_summary`.
 - **Meta Muse Image Editor / Refiner (`MuseImageEditorNode`)**: Iterative multi-turn image editing.
 - **Meta Muse Show Text / Reasoning (`MuseShowTextNode`)**: Lightweight canvas display node to view reasoning logs and IDs.
-- **Meta Muse Mode Switch (`MuseSwitchNode`)**: Routes between initial generation and iterative editor outputs to drive a single `SaveImage` / `MuseShowTextNode`, avoiding duplicate saved images.
-
+- **Meta Muse Mode Switch (`MuseSwitchNode`)**: Routes between initial generation and iterative editor outputs (`IMAGE`, `reasoning_summary`, and `response_id`) to drive a single `SaveImage` / `MuseShowTextNode`, avoiding duplicate saved images and allowing dynamic response ID file naming.
 
 ---
 
@@ -48,5 +47,5 @@ The **Muse Image Editor** node enables stateful, conversational image refinement
 ## Example Workflows
 
 An example workflow is included in the [`example_workflows/`](example_workflows/) folder:
-- **`metamuse-full-workflow.json`**: Complete pipeline showing initial generation (`MuseImageNode`), multi-turn editing (`MuseImageEditorNode`), output switching (`MuseSwitchNode`), and reasoning visualization (`MuseShowTextNode`).
+- **`metamuse-full-workflow.json`**: Complete pipeline showing initial generation (`MuseImageNode`), multi-turn editing (`MuseImageEditorNode`), output switching (`MuseSwitchNode`), reasoning visualization (`MuseShowTextNode`), and dynamic file naming using the active `response_id`.
 
