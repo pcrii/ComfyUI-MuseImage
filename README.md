@@ -42,8 +42,10 @@ The **Muse Spark Prompt Expander** node transforms brief ideas into rich, high-f
 - **`prompt_format`**:
   - `natural_language (modern / flux / muse)`: Descriptive prose covering subject, lighting, composition, and texture.
   - `clip_l_tags (sd1.5 / sdxl / booru)`: Comma-separated CLIP tokens, quality tags, and booru keywords tailored for older or tag-based models.
-  - `minimax_h3 (video + audio timeline)`: Formats strictly into the official MiniMax H3 three-section video/audio screenplay (`integrated_multimodal_description`, `overall_soundscape`, `non_diegetic_music`).
-- **`preset`**: Includes `photorealistic`, `cinematic`, `digital_art / anime`, `general_expansion`, `minimax_h3 (video + audio director)`, and `custom`.
+  - `minimax_h3_fl2va (first frame + audio timeline)`: Formats into keyframe alignment header + 3-section video/audio timeline (`integrated_multimodal_description`, `overall_soundscape`, `non_diegetic_music`). Diegetic singing/dialogue is tagged with speaker `(S1)` and `<d>[Language] lyrics</d>`, and latent-guided audio is guided via acoustic features (no `<Audio 1>` prompt tags).
+  - `minimax_h3_ref2va (6-section multi-reference)`: Formats strictly into the official MiniMax H3 6-section rewrite structure (`subject_definitions`, `summary`, `retention_analysis`, `detailed_description`, `overall_soundscape`, `non_diegetic_music`) with tokenized `<Picture 1>`..`<Picture 9>` and `<Audio 1>`..`<Audio 3>`.
+  - `minimax_h3 (video + audio timeline)`: Backwards-compatible alias for `fl2va`.
+- **`preset`**: Includes `photorealistic`, `cinematic`, `digital_art / anime`, `general_expansion`, `minimax_h3_fl2va (first frame + audio guide)`, `minimax_h3_ref2va (multi-reference r2v)`, `minimax_h3 (video + audio director)` (alias), and `custom`.
 - **`include_negative`**:
   - `False` *(default)*: Optimized for distilled / modern models. Instructs the model not to rely on negative prompts and embeds all quality directives directly into the positive prompt. Negative prompt output is empty (`""`).
   - `True`: Generates both an expanded positive prompt and a tailored negative prompt to eliminate common artifacts.

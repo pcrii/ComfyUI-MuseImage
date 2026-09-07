@@ -693,8 +693,19 @@ class MuseSparkPromptExpander:
             "Provide a balanced, versatile enhancement: enrich subject anatomy, setting, atmospheric lighting, "
             "and composition without over-constraining the visual medium."
         ),
+        "minimax_h3_fl2va (first frame + audio guide)": (
+            "MiniMax H3 FL2VA / I2VA / T2VA director mode: keyframe alignment instruction header, "
+            "3-section timeline (integrated_multimodal_description, overall_soundscape, non_diegetic_music), "
+            "diegetic dialogue/singing with speaker (S1) and <d>[Language] lyrics</d> brackets, and acoustic feature "
+            "description for latent-guided audio without <Audio 1> tags."
+        ),
+        "minimax_h3_ref2va (multi-reference r2v)": (
+            "MiniMax H3 Ref2VA multi-reference mode: full 6-section structure (subject_definitions, summary, "
+            "retention_analysis, detailed_description, overall_soundscape, non_diegetic_music) using 1-indexed "
+            "<Picture 1>..<Picture 9> and <Audio 1>..<Audio 3> token bindings."
+        ),
         "minimax_h3 (video + audio director)": (
-            "MiniMax H3 omni-modal text-to-video director mode with native stereo audio."
+            "MiniMax H3 omni-modal text-to-video director mode (alias for minimax_h3_fl2va)."
         ),
         "custom": "Follow the user's custom instructions precisely.",
     }
@@ -710,45 +721,100 @@ class MuseSparkPromptExpander:
             "for CLIP text encoders (e.g., SD 1.5, SDXL base). Prioritize core subjects, clothing, poses, background "
             "elements, lighting tags, and quality tokens (e.g. masterpiece, sharp focus). Do NOT write full conversational sentences."
         ),
-        "minimax_h3 (video + audio timeline)": (
-            "Format strictly as a MiniMax H3 three-section video/audio screenplay: "
+        "minimax_h3_fl2va (first frame + audio timeline)": (
+            "Format as MiniMax H3 FL2VA/I2VA/T2VA: optional keyframe alignment header, followed by the 3 core sections: "
             "integrated_multimodal_description, overall_soundscape, and non_diegetic_music."
+        ),
+        "minimax_h3_ref2va (6-section multi-reference)": (
+            "Format strictly as MiniMax H3 Ref2VA six-section screenplay: "
+            "subject_definitions, summary, retention_analysis, detailed_description, overall_soundscape, and non_diegetic_music."
+        ),
+        "minimax_h3 (video + audio timeline)": (
+            "Format strictly as a MiniMax H3 three-section video/audio screenplay (alias for fl2va)."
         ),
     }
 
-    MINIMAX_H3_INSTRUCTIONS = (
-        "You are an expert AI director and screenplay prompt engineer for MiniMax H3 (an omni-modal "
-        "video generation model that natively co-generates synchronized stereo audio, dialogue, and music in a single pass).\n"
+    MINIMAX_H3_FL2VA_INSTRUCTIONS = (
+        "You are an expert AI director and screenplay prompt engineer for MiniMax H3 FL2VA / I2VA / T2VA "
+        "(an omni-modal video generation model that natively co-generates synchronized stereo audio, dialogue, and music in a single pass).\n"
         "Your task is to transform the user's idea into a complete, professional MiniMax H3 screenplay prompt.\n\n"
         "Strict Architectural Guidelines:\n"
-        "1. Required Structure: Your output MUST contain exactly three structured sections in this order:\n"
-        "   integrated_multimodal_description:\n"
-        "   [Shot 1] ...\n"
-        "   [Shot 2] At MM:SS.mmm, ...\n\n"
-        "   overall_soundscape:\n"
-        "   ...\n\n"
-        "   non_diegetic_music:\n"
-        "   ...\n\n"
+        "1. Keyframe Alignment Header (when reference image(s) are supplied):\n"
+        "   - Exactly 1 Image (I2VA / First Frame): MUST begin with the exact header line:\n"
+        "     For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.\n"
+        "     Followed by a blank line before the core sections.\n"
+        "   - Exactly 2 Images (FL2VA / First & Last Frame): MUST begin with the exact header line:\n"
+        "     How the reference pictures align with the target video — Picture 1 (from Shot 1) aligns with the 0.00-second mark of the target video; Picture 2 (from Shot N) aligns with the S.SS-second mark of the target video.\n"
+        "     Followed by a blank line before the core sections.\n"
+        "   - 0 Images (T2VA / Text-to-Video): Omit any alignment header and start directly with integrated_multimodal_description:.\n\n"
         "2. Section 1 - 'integrated_multimodal_description:':\n"
-        "   - Opening Shot: [Shot 1] MUST begin with visual style (e.g. 'Live-action, cinematic,' or '3D CG,' or 'Watercolor,') "
-        "and camera framing. [Shot 1] MUST NEVER have a timestamp.\n"
+        "   - Opening Shot: [Shot 1] MUST begin with visual style (e.g. 'Live-action, cinematic,' or '3D CG,' or 'Vintage 35mm film,') "
+        "and camera framing. [Shot 1] MUST NEVER have a timestamp. If keyframe images are used, ground [Shot 1] in the visual features, "
+        "lighting, and subjects of <Picture 1> before developing forward.\n"
         "   - Shot Cuts: Subsequent shots must use increasing timestamps formatted strictly as 'At MM:SS.mmm' "
-        "(e.g. '[Shot 2] At 00:03.500, the camera cuts to...').\n"
+        "(e.g. '[Shot 2] At 00:03.500, the camera cuts to...'). For smooth FL2VA interpolation, single-shot progression is preferred unless cuts are explicitly requested.\n"
         "   - Camera Movement: Embed camera motion naturally into action descriptions using Motion Type + Amplitude + Speed "
         "(e.g. 'The camera pushes in with small amplitude at slow speed toward the subject'). Valid motions include: "
         "Push In, Pull Out, Zoom In/Out, Pan Left/Right, Truck Left/Right, Tilt Up/Down, Pedestal Up/Down, Arc Shot, Tracking Shot, Static Shot.\n"
-        "   - Dialogue: Assign speaker IDs e.g. '(S1)', '(S2)'. Put character posture and delivery outside `<d>`. "
-        "Put only language code and exact spoken text inside `<d>[Language] spoken words</d>` "
-        "(e.g. `The astronaut (S1) whispers: <d>[English] We found it.</d>`).\n"
+        "   - Dialogue, Singing, & Lip-Sync: Assign speaker IDs e.g. '(S1)', '(S2)'. Character posture, facial expressions, vocal delivery, "
+        "and actions belong OUTSIDE `<d>`. Spoken language code and exact lyrics or dialogue belong INSIDE `<d>[Language] spoken or sung words</d>` "
+        "(e.g. `The singer with an intense expression (S1) mouths: <d>[English] My head is a flame</d>`). All diegetic vocalization belongs here.\n"
         "   - On-Screen Text: Enclose visible signage/text in double quotes.\n\n"
         "3. Section 2 - 'overall_soundscape:':\n"
         "   - 1 to 4 sentences describing ambient environmental audio, room tone, footsteps, wind, weather, and physical action Foley. "
-        "NEVER repeat spoken dialogue or background music score in this section.\n\n"
+        "Non-verbal human sounds (breathing, panting, gasps) belong here. NEVER repeat spoken/sung lyrics or background score in this section.\n\n"
         "4. Section 3 - 'non_diegetic_music:':\n"
-        "   - 1 to 3 sentences describing audience-only background score: acoustic instrumentation, tempo, and rhythm dynamics "
-        "(e.g. 'Sparse acoustic piano notes at a slow tempo, joined by sustained cello that swells'). "
-        "NEVER use abstract emotional buzzwords like 'epic' or 'inspiring'. Write 'N/A' if completely silent without background music."
+        "   - 1 to 3 sentences describing audience-only background musical score: instrumentation, tempo/BPM, rhythm dynamics, and acoustic timbre "
+        "(e.g. 'Heavy distorted analog synth bass pulsing at 115 BPM, joined by rhythmic kick drums and airy synthesizer pads that build in intensity').\n"
+        "   - IMPORTANT LATENT AUDIO GUIDE RULE: In FL2VA pipelines where audio is conditioned directly in latent space (via latent guides), "
+        "do NOT use `<Audio 1>` tags in the prompt text. Instead, meticulously describe the acoustic characteristics (tempo, rhythm, instruments, timbre) "
+        "so the model's cross-attention aligns with the latent audio conditioning! Write 'N/A' only if completely silent."
     )
+
+    MINIMAX_H3_REF2VA_INSTRUCTIONS = (
+        "You are an expert AI director and multi-modal screenplay prompt engineer for MiniMax H3 Ref2VA "
+        "(multi-reference video generation model supporting tokenized reference images <Picture 1>..<Picture 9> "
+        "and reference audio tracks <Audio 1>..<Audio 3>).\n"
+        "Your task is to transform the user's idea and reference inputs into the official MiniMax H3 6-section rewrite format.\n\n"
+        "Strict Architectural Guidelines:\n"
+        "Your output MUST contain exactly six structured sections in this exact order:\n\n"
+        "1. 'subject_definitions:':\n"
+        "   Define each referenced entity on its own line using standardized tags:\n"
+        "   - `<Subject N>`: Reusable visible subject (person, costume, environment, prop, or style). E.g.:\n"
+        "     `<Subject 1> is the young woman in <Picture 1>, with long dark hair, a blue cardigan, and silver necklace.`\n"
+        "   - `<Picture N>`: Standalone image anchor if used as first frame, keyframe, or composition anchor. E.g.:\n"
+        "     `<Picture 1> is the first frame of [Shot 1], establishing the subject and lighting.`\n"
+        "   - `<Video N>`: Reference video for motion, camera work, or structural edit.\n"
+        "   - `<Audio N>`: Reference audio track. E.g.:\n"
+        "     `<Audio 1> is the background music track providing tempo, beat, and melody.` or\n"
+        "     `<Audio 1> is the voice-timbre reference for <Subject 1> (S1).`\n\n"
+        "2. 'summary:':\n"
+        "   One concise English paragraph summarizing the target video and reference relationships. "
+        "MUST begin with a square-bracketed task type prefix, such as:\n"
+        "   `[reference generation] ...`\n"
+        "   `[keyframe completion + audio reference] ...`\n"
+        "   `[audio reuse + reference generation] ...`\n\n"
+        "3. 'retention_analysis:':\n"
+        "   Explicitly describe how referenced content is preserved, modified, or transferred across the video. "
+        "Document what aspects of <Picture N> or <Audio N> are retained (e.g. facial features, costume, musical rhythm) "
+        "and what aspects change or evolve.\n\n"
+        "4. 'detailed_description:':\n"
+        "   The shot-by-shot visual and diegetic timeline in playback order:\n"
+        "   - [Shot 1] begins with style and composition framing (no timestamp). Subsequent shots use '[Shot N] At MM:SS.mmm, ...'.\n"
+        "   - Explicitly cite where referenced entities appear (e.g. '<Subject 1> turns toward the window...').\n"
+        "   - Camera movement: Motion Type + Amplitude + Speed (e.g. 'The camera pushes in with small amplitude at slow speed...').\n"
+        "   - Dialogue, singing, & lip-sync: Speaker IDs e.g. '(S1)' with delivery outside and spoken words inside `<d>[Language] lyrics or dialogue</d>`.\n"
+        "   - Visible text in double quotes.\n\n"
+        "5. 'overall_soundscape:':\n"
+        "   1 to 4 sentences summarizing ambient sound, room tone, environmental audio, and physical action Foley. "
+        "No dialogue or background score repetition.\n\n"
+        "6. 'non_diegetic_music:':\n"
+        "   1 to 3 sentences describing the audience-only musical score. When reference audio is supplied, explicitly bind "
+        "and describe it using `<Audio 1>` (e.g. 'Driven by <Audio 1>, energetic synthwave bass at 120 BPM with driving percussion...'). "
+        "Write 'N/A' if completely silent."
+    )
+
+    MINIMAX_H3_INSTRUCTIONS = MINIMAX_H3_FL2VA_INSTRUCTIONS
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -765,6 +831,8 @@ class MuseSparkPromptExpander:
                     [
                         "natural_language (modern / flux / muse)",
                         "clip_l_tags (sd1.5 / sdxl / booru)",
+                        "minimax_h3_fl2va (first frame + audio timeline)",
+                        "minimax_h3_ref2va (6-section multi-reference)",
                         "minimax_h3 (video + audio timeline)",
                     ],
                     {"default": "natural_language (modern / flux / muse)"},
@@ -775,6 +843,8 @@ class MuseSparkPromptExpander:
                         "cinematic",
                         "digital_art / anime",
                         "general_expansion",
+                        "minimax_h3_fl2va (first frame + audio guide)",
+                        "minimax_h3_ref2va (multi-reference r2v)",
                         "minimax_h3 (video + audio director)",
                         "custom",
                     ],
@@ -844,15 +914,76 @@ class MuseSparkPromptExpander:
 
         images = _extract_images(reference_image, reference_images)
 
-        is_minimax_h3 = (
-            preset == "minimax_h3 (video + audio director)"
-            or prompt_format == "minimax_h3 (video + audio timeline)"
+        is_ref2va = (
+            preset == "minimax_h3_ref2va (multi-reference r2v)"
+            or prompt_format == "minimax_h3_ref2va (6-section multi-reference)"
+        )
+        is_fl2va = (
+            preset in ("minimax_h3_fl2va (first frame + audio guide)", "minimax_h3 (video + audio director)")
+            or prompt_format in ("minimax_h3_fl2va (first frame + audio timeline)", "minimax_h3 (video + audio timeline)")
         )
 
-        if is_minimax_h3:
+        if is_ref2va:
             format_structure = (
                 "Strict Output Format:\n"
                 "[PROMPT]\n"
+                "subject_definitions:\n"
+                "<Subject 1> is ...\n\n"
+                "summary:\n"
+                "[reference generation] ...\n\n"
+                "retention_analysis:\n"
+                "...\n\n"
+                "detailed_description:\n"
+                "[Shot 1] ...\n\n"
+                "overall_soundscape:\n"
+                "...\n\n"
+                "non_diegetic_music:\n"
+                "...\n"
+                "[/PROMPT]\n"
+            )
+            if include_negative:
+                format_structure += (
+                    "[NEGATIVE]\n"
+                    "your tailored negative prompt here\n"
+                    "[/NEGATIVE]\n"
+                )
+            format_structure += "Do NOT include any conversational filler, notes, or markdown fences outside these tags."
+
+            instructions_parts = [self.MINIMAX_H3_REF2VA_INSTRUCTIONS]
+            if images:
+                num_imgs = len(images)
+                instructions_parts.append(
+                    f"Reference Image(s) Attached: You have received {num_imgs} reference image(s). "
+                    f"Bind them under subject_definitions as <Picture 1>"
+                    + (f" through <Picture {num_imgs}>" if num_imgs > 1 else "")
+                    + " and/or assign them to <Subject 1>, etc. Reference them consistently in retention_analysis and detailed_description."
+                )
+            if custom_instructions and custom_instructions.strip():
+                instructions_parts.append(f"Director / User custom requirements: {custom_instructions.strip()}")
+            if not include_negative:
+                instructions_parts.append(
+                    "Negative prompt guidance: MiniMax H3 does NOT use negative prompts. Incorporate all visual and acoustic "
+                    "quality directives directly into the description. Do NOT output a negative prompt."
+                )
+            else:
+                instructions_parts.append(
+                    "Negative prompt guidance: Generate both the MiniMax H3 prompt and a targeted negative prompt."
+                )
+            instructions_parts.append(format_structure)
+            instructions = "\n\n".join(instructions_parts)
+
+        elif is_fl2va:
+            format_structure = "Strict Output Format:\n[PROMPT]\n"
+            if images:
+                if len(images) == 1:
+                    format_structure += (
+                        "For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.\n\n"
+                    )
+                else:
+                    format_structure += (
+                        "How the reference pictures align with the target video — Picture 1 (from Shot 1) aligns with the 0.00-second mark of the target video; Picture 2 (from Shot 1) aligns with the [duration]-second mark of the target video.\n\n"
+                    )
+            format_structure += (
                 "integrated_multimodal_description:\n"
                 "[Shot 1] ...\n\n"
                 "overall_soundscape:\n"
@@ -869,13 +1000,28 @@ class MuseSparkPromptExpander:
                 )
             format_structure += "Do NOT include any conversational filler, notes, or markdown fences outside these tags."
 
-            instructions_parts = [self.MINIMAX_H3_INSTRUCTIONS]
+            instructions_parts = [self.MINIMAX_H3_FL2VA_INSTRUCTIONS]
             if images:
+                if len(images) == 1:
+                    instructions_parts.append(
+                        "Reference Image Attached: Exactly 1 image is provided as the first-frame anchor (<Picture 1>). "
+                        "You MUST begin the prompt with the exact header:\n"
+                        "For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.\n"
+                        "Then ground [Shot 1] in the visual style, subject, clothing, and scene of <Picture 1> before developing forward."
+                    )
+                elif len(images) >= 2:
+                    instructions_parts.append(
+                        f"Reference Images Attached: {len(images)} images provided (Picture 1 as first frame, Picture 2 as last frame). "
+                        "You MUST begin the prompt with the exact keyframe alignment header:\n"
+                        "How the reference pictures align with the target video — Picture 1 (from Shot 1) aligns with the 0.00-second mark of the target video; Picture 2 (from Shot 1) aligns with the [duration]-second mark of the target video.\n"
+                        "Describe the continuous motion and transformation path connecting Picture 1 to Picture 2."
+                    )
+            else:
                 instructions_parts.append(
-                    f"Reference Image(s) Attached: You have been provided with {len(images)} reference image(s). "
-                    "Analyze their visual details, characters, costumes, environment, and lighting to ground the "
-                    "screenplay. Reference them in your description as <Picture 1>, <Picture 2>, etc. or incorporate their visual attributes."
+                    "No reference images provided (Text-to-Video / T2VA mode). Do NOT include any keyframe alignment instruction; "
+                    "begin directly with integrated_multimodal_description:."
                 )
+
             if custom_instructions and custom_instructions.strip():
                 instructions_parts.append(f"Director / User custom requirements: {custom_instructions.strip()}")
             if not include_negative:
