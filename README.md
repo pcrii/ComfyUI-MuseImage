@@ -47,7 +47,8 @@ The **Muse Spark Prompt Expander** node transforms brief ideas into rich, high-f
 - **`include_negative`**:
   - `False` *(default)*: Optimized for distilled / modern models. Instructs the model not to rely on negative prompts and embeds all quality directives directly into the positive prompt. Negative prompt output is empty (`""`).
   - `True`: Generates both an expanded positive prompt and a tailored negative prompt to eliminate common artifacts.
-- **`seed`**: Standard ComfyUI seed widget (`fixed`, `randomize`, etc.) to control whether prompts remain cached or generate fresh variations on execution.
+- **`seed`**: Standard ComfyUI seed widget (defaults to `fixed` so generated prompts stay locked across queues until you manually re-roll or randomize).
+- **`reference_image` / `reference_images`**: Optional single image or array from `Meta Muse Image Array` (`MUSE_IMAGES`). Muse Spark's multimodal vision encoder directly inspects the visual features, composition, colors, and characters of your references to ground and enrich the expanded prompt.
 - **`custom_instructions`**: Optional string input socket to override or supplement the prompt generation instructions.
 - **Outputs**:
   - `expanded_prompt`: The expanded positive prompt.

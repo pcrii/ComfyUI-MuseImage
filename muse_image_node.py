@@ -801,11 +801,13 @@ class MuseSparkPromptExpander:
                         "default": 0,
                         "min": 0,
                         "max": 0xFFFFFFFFFFFFFFFF,
-                        "control_after_generate": "randomize",
+                        "control_after_generate": "fixed",
                     },
                 ),
             },
             "optional": {
+                "reference_image": ("IMAGE",),
+                "reference_images": ("MUSE_IMAGES",),
                 "custom_instructions": ("STRING", {"forceInput": True}),
                 "api_key_override": ("STRING", {"default": "", "multiline": False}),
             },
@@ -829,6 +831,8 @@ class MuseSparkPromptExpander:
         model: str,
         reasoning_effort: str,
         seed: int,
+        reference_image: torch.Tensor = None,
+        reference_images: list = None,
         custom_instructions: str = None,
         api_key_override: str = "",
     ):
@@ -837,6 +841,8 @@ class MuseSparkPromptExpander:
             raise ValueError(
                 "MODEL_API_KEY is not set or invalid. Please check ComfyUI/custom_nodes/ComfyUI-MuseImage/config.json."
             )
+
+        images = _extract_images(reference_image, reference_images)
 
         is_minimax_h3 = (
             preset == "minimax_h3 (video + audio director)"
@@ -864,6 +870,12 @@ class MuseSparkPromptExpander:
             format_structure += "Do NOT include any conversational filler, notes, or markdown fences outside these tags."
 
             instructions_parts = [self.MINIMAX_H3_INSTRUCTIONS]
+            if images:
+                instructions_parts.append(
+                    f"Reference Image(s) Attached: You have been provided with {len(images)} reference image(s). "
+                    "Analyze their visual details, characters, costumes, environment, and lighting to ground the "
+                    "screenplay. Reference them in your description as <Picture 1>, <Picture 2>, etc. or incorporate their visual attributes."
+                )
             if custom_instructions and custom_instructions.strip():
                 instructions_parts.append(f"Director / User custom requirements: {custom_instructions.strip()}")
             if not include_negative:
@@ -919,6 +931,14 @@ class MuseSparkPromptExpander:
                 f"Format requirement: {format_guide}",
             ]
 
+            if images:
+                instructions_parts.append(
+                    f"Reference Image(s) Attached: You have received {len(images)} reference image(s). "
+                    "Carefully inspect their visual elements (subjects, appearance, clothing, lighting, textures, "
+                    "color palette, composition, environment). Use these visual cues to ground, inspire, and enrich "
+                    "your expanded prompt, incorporating specific details from the images while executing the user's concept."
+                )
+
             if preset == "custom" and custom_instructions and custom_instructions.strip():
                 instructions_parts.append(f"Instructions: {custom_instructions.strip()}")
             else:
@@ -934,13 +954,27 @@ class MuseSparkPromptExpander:
         payload = {
             "model": model,
             "instructions": instructions,
-            "input": prompt,
             "reasoning": {
                 "effort": reasoning_effort,
                 "summary": "detailed",
             },
             "store": True,
         }
+
+        if images:
+            input_text = prompt if prompt and prompt.strip() else "Analyze the provided reference image(s) and expand into a detailed prompt."
+            content = [{"type": "input_text", "text": input_text}]
+            for img in images:
+                image_data_url = _tensor_to_data_url(img)
+                content.append({"type": "input_image", "image_url": image_data_url})
+            payload["input"] = [
+                {
+                    "role": "user",
+                    "content": content,
+                }
+            ]
+        else:
+            payload["input"] = prompt
 
         raw_text, response_id, reasoning_summary = _call_muse_spark_api(api_key, payload)
         expanded_prompt, negative_prompt = _parse_spark_output(raw_text, include_negative)
