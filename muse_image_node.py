@@ -693,6 +693,9 @@ class MuseSparkPromptExpander:
             "Provide a balanced, versatile enhancement: enrich subject anatomy, setting, atmospheric lighting, "
             "and composition without over-constraining the visual medium."
         ),
+        "minimax_h3 (video + audio director)": (
+            "MiniMax H3 omni-modal text-to-video director mode with native stereo audio."
+        ),
         "custom": "Follow the user's custom instructions precisely.",
     }
 
@@ -707,7 +710,45 @@ class MuseSparkPromptExpander:
             "for CLIP text encoders (e.g., SD 1.5, SDXL base). Prioritize core subjects, clothing, poses, background "
             "elements, lighting tags, and quality tokens (e.g. masterpiece, sharp focus). Do NOT write full conversational sentences."
         ),
+        "minimax_h3 (video + audio timeline)": (
+            "Format strictly as a MiniMax H3 three-section video/audio screenplay: "
+            "integrated_multimodal_description, overall_soundscape, and non_diegetic_music."
+        ),
     }
+
+    MINIMAX_H3_INSTRUCTIONS = (
+        "You are an expert AI director and screenplay prompt engineer for MiniMax H3 (an omni-modal "
+        "video generation model that natively co-generates synchronized stereo audio, dialogue, and music in a single pass).\n"
+        "Your task is to transform the user's idea into a complete, professional MiniMax H3 screenplay prompt.\n\n"
+        "Strict Architectural Guidelines:\n"
+        "1. Required Structure: Your output MUST contain exactly three structured sections in this order:\n"
+        "   integrated_multimodal_description:\n"
+        "   [Shot 1] ...\n"
+        "   [Shot 2] At MM:SS.mmm, ...\n\n"
+        "   overall_soundscape:\n"
+        "   ...\n\n"
+        "   non_diegetic_music:\n"
+        "   ...\n\n"
+        "2. Section 1 - 'integrated_multimodal_description:':\n"
+        "   - Opening Shot: [Shot 1] MUST begin with visual style (e.g. 'Live-action, cinematic,' or '3D CG,' or 'Watercolor,') "
+        "and camera framing. [Shot 1] MUST NEVER have a timestamp.\n"
+        "   - Shot Cuts: Subsequent shots must use increasing timestamps formatted strictly as 'At MM:SS.mmm' "
+        "(e.g. '[Shot 2] At 00:03.500, the camera cuts to...').\n"
+        "   - Camera Movement: Embed camera motion naturally into action descriptions using Motion Type + Amplitude + Speed "
+        "(e.g. 'The camera pushes in with small amplitude at slow speed toward the subject'). Valid motions include: "
+        "Push In, Pull Out, Zoom In/Out, Pan Left/Right, Truck Left/Right, Tilt Up/Down, Pedestal Up/Down, Arc Shot, Tracking Shot, Static Shot.\n"
+        "   - Dialogue: Assign speaker IDs e.g. '(S1)', '(S2)'. Put character posture and delivery outside `<d>`. "
+        "Put only language code and exact spoken text inside `<d>[Language] spoken words</d>` "
+        "(e.g. `The astronaut (S1) whispers: <d>[English] We found it.</d>`).\n"
+        "   - On-Screen Text: Enclose visible signage/text in double quotes.\n\n"
+        "3. Section 2 - 'overall_soundscape:':\n"
+        "   - 1 to 4 sentences describing ambient environmental audio, room tone, footsteps, wind, weather, and physical action Foley. "
+        "NEVER repeat spoken dialogue or background music score in this section.\n\n"
+        "4. Section 3 - 'non_diegetic_music:':\n"
+        "   - 1 to 3 sentences describing audience-only background score: acoustic instrumentation, tempo, and rhythm dynamics "
+        "(e.g. 'Sparse acoustic piano notes at a slow tempo, joined by sustained cello that swells'). "
+        "NEVER use abstract emotional buzzwords like 'epic' or 'inspiring'. Write 'N/A' if completely silent without background music."
+    )
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -724,6 +765,7 @@ class MuseSparkPromptExpander:
                     [
                         "natural_language (modern / flux / muse)",
                         "clip_l_tags (sd1.5 / sdxl / booru)",
+                        "minimax_h3 (video + audio timeline)",
                     ],
                     {"default": "natural_language (modern / flux / muse)"},
                 ),
@@ -733,6 +775,7 @@ class MuseSparkPromptExpander:
                         "cinematic",
                         "digital_art / anime",
                         "general_expansion",
+                        "minimax_h3 (video + audio director)",
                         "custom",
                     ],
                     {"default": "photorealistic"},
@@ -795,58 +838,98 @@ class MuseSparkPromptExpander:
                 "MODEL_API_KEY is not set or invalid. Please check ComfyUI/custom_nodes/ComfyUI-MuseImage/config.json."
             )
 
-        format_guide = self.FORMAT_GUIDES.get(
-            prompt_format, self.FORMAT_GUIDES["natural_language (modern / flux / muse)"]
-        )
-        preset_guide = self.PRESET_GUIDES.get(
-            preset, self.PRESET_GUIDES["photorealistic"]
+        is_minimax_h3 = (
+            preset == "minimax_h3 (video + audio director)"
+            or prompt_format == "minimax_h3 (video + audio timeline)"
         )
 
-        if include_negative:
-            neg_instruction = (
-                "Generate both an expanded positive prompt and a targeted negative prompt to eliminate common artifacts "
-                "or unwanted elements for this subject and style."
-            )
+        if is_minimax_h3:
             format_structure = (
                 "Strict Output Format:\n"
                 "[PROMPT]\n"
-                "your expanded positive prompt here\n"
+                "integrated_multimodal_description:\n"
+                "[Shot 1] ...\n\n"
+                "overall_soundscape:\n"
+                "...\n\n"
+                "non_diegetic_music:\n"
+                "...\n"
                 "[/PROMPT]\n"
-                "[NEGATIVE]\n"
-                "your tailored negative prompt here\n"
-                "[/NEGATIVE]\n"
-                "Do NOT include any conversational filler, notes, or markdown fences outside these tags."
             )
-        else:
-            neg_instruction = (
-                "The target image model does NOT support or use negative prompts (e.g. distilled or modern architecture). "
-                "Incorporate all quality, cleanliness, lighting, and detail guidance directly into the positive prompt. "
-                "Do NOT output or mention a negative prompt."
-            )
-            format_structure = (
-                "Strict Output Format:\n"
-                "[PROMPT]\n"
-                "your expanded positive prompt here\n"
-                "[/PROMPT]\n"
-                "Do NOT include any conversational filler, notes, or markdown fences outside these tags."
-            )
+            if include_negative:
+                format_structure += (
+                    "[NEGATIVE]\n"
+                    "your tailored negative prompt here\n"
+                    "[/NEGATIVE]\n"
+                )
+            format_structure += "Do NOT include any conversational filler, notes, or markdown fences outside these tags."
 
-        instructions_parts = [
-            "You are an expert AI prompt engineer for image generation.",
-            f"Format requirement: {format_guide}",
-        ]
-
-        if preset == "custom" and custom_instructions and custom_instructions.strip():
-            instructions_parts.append(f"Instructions: {custom_instructions.strip()}")
-        else:
-            instructions_parts.append(f"Aesthetic guidance: {preset_guide}")
+            instructions_parts = [self.MINIMAX_H3_INSTRUCTIONS]
             if custom_instructions and custom_instructions.strip():
-                instructions_parts.append(f"Additional instructions: {custom_instructions.strip()}")
+                instructions_parts.append(f"Director / User custom requirements: {custom_instructions.strip()}")
+            if not include_negative:
+                instructions_parts.append(
+                    "Negative prompt guidance: MiniMax H3 does NOT use negative prompts. Incorporate all visual and acoustic "
+                    "quality directives directly into the description. Do NOT output a negative prompt."
+                )
+            else:
+                instructions_parts.append(
+                    "Negative prompt guidance: Generate both the MiniMax H3 prompt and a targeted negative prompt."
+                )
+            instructions_parts.append(format_structure)
+            instructions = "\n\n".join(instructions_parts)
+        else:
+            format_guide = self.FORMAT_GUIDES.get(
+                prompt_format, self.FORMAT_GUIDES["natural_language (modern / flux / muse)"]
+            )
+            preset_guide = self.PRESET_GUIDES.get(
+                preset, self.PRESET_GUIDES["photorealistic"]
+            )
 
-        instructions_parts.append(f"Negative prompt guidance: {neg_instruction}")
-        instructions_parts.append(format_structure)
+            if include_negative:
+                neg_instruction = (
+                    "Generate both an expanded positive prompt and a targeted negative prompt to eliminate common artifacts "
+                    "or unwanted elements for this subject and style."
+                )
+                format_structure = (
+                    "Strict Output Format:\n"
+                    "[PROMPT]\n"
+                    "your expanded positive prompt here\n"
+                    "[/PROMPT]\n"
+                    "[NEGATIVE]\n"
+                    "your tailored negative prompt here\n"
+                    "[/NEGATIVE]\n"
+                    "Do NOT include any conversational filler, notes, or markdown fences outside these tags."
+                )
+            else:
+                neg_instruction = (
+                    "The target image model does NOT support or use negative prompts (e.g. distilled or modern architecture). "
+                    "Incorporate all quality, cleanliness, lighting, and detail guidance directly into the positive prompt. "
+                    "Do NOT output or mention a negative prompt."
+                )
+                format_structure = (
+                    "Strict Output Format:\n"
+                    "[PROMPT]\n"
+                    "your expanded positive prompt here\n"
+                    "[/PROMPT]\n"
+                    "Do NOT include any conversational filler, notes, or markdown fences outside these tags."
+                )
 
-        instructions = "\n\n".join(instructions_parts)
+            instructions_parts = [
+                "You are an expert AI prompt engineer for image generation.",
+                f"Format requirement: {format_guide}",
+            ]
+
+            if preset == "custom" and custom_instructions and custom_instructions.strip():
+                instructions_parts.append(f"Instructions: {custom_instructions.strip()}")
+            else:
+                instructions_parts.append(f"Aesthetic guidance: {preset_guide}")
+                if custom_instructions and custom_instructions.strip():
+                    instructions_parts.append(f"Additional instructions: {custom_instructions.strip()}")
+
+            instructions_parts.append(f"Negative prompt guidance: {neg_instruction}")
+            instructions_parts.append(format_structure)
+
+            instructions = "\n\n".join(instructions_parts)
 
         payload = {
             "model": model,

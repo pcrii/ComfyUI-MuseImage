@@ -42,6 +42,8 @@ The **Muse Spark Prompt Expander** node transforms brief ideas into rich, high-f
 - **`prompt_format`**:
   - `natural_language (modern / flux / muse)`: Descriptive prose covering subject, lighting, composition, and texture.
   - `clip_l_tags (sd1.5 / sdxl / booru)`: Comma-separated CLIP tokens, quality tags, and booru keywords tailored for older or tag-based models.
+  - `minimax_h3 (video + audio timeline)`: Formats strictly into the official MiniMax H3 three-section video/audio screenplay (`integrated_multimodal_description`, `overall_soundscape`, `non_diegetic_music`).
+- **`preset`**: Includes `photorealistic`, `cinematic`, `digital_art / anime`, `general_expansion`, `minimax_h3 (video + audio director)`, and `custom`.
 - **`include_negative`**:
   - `False` *(default)*: Optimized for distilled / modern models. Instructs the model not to rely on negative prompts and embeds all quality directives directly into the positive prompt. Negative prompt output is empty (`""`).
   - `True`: Generates both an expanded positive prompt and a tailored negative prompt to eliminate common artifacts.
