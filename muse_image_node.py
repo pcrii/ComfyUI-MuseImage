@@ -237,6 +237,15 @@ class MuseImageNode:
                     ["high", "medium", "low"],
                     {"default": "high"},
                 ),
+                "seed": (
+                    "INT",
+                    {
+                        "default": 0,
+                        "min": 0,
+                        "max": 0xFFFFFFFFFFFFFFFF,
+                        "control_after_generate": "randomize",
+                    },
+                ),
                 "model": (["muse-image-1.0"], {"default": "muse-image-1.0"}),
             },
             "optional": {
@@ -251,11 +260,16 @@ class MuseImageNode:
     FUNCTION = "generate"
     CATEGORY = "phaulty nodes/Muse"
 
+    @classmethod
+    def IS_CHANGED(cls, seed=0, **kwargs):
+        return seed
+
     def generate(
         self,
         prompt: str,
         size: str,
         reasoning_strength: str,
+        seed: int = 0,
         model: str = "muse-image-1.0",
         reference_image: torch.Tensor = None,
         reference_images: list = None,
@@ -329,6 +343,15 @@ class MuseImageEditorNode:
                     ["accumulate_edits", "reset_to_incoming_id"],
                     {"default": "accumulate_edits"},
                 ),
+                "seed": (
+                    "INT",
+                    {
+                        "default": 0,
+                        "min": 0,
+                        "max": 0xFFFFFFFFFFFFFFFF,
+                        "control_after_generate": "randomize",
+                    },
+                ),
             },
             "optional": {
                 "previous_response_id": ("STRING", {"forceInput": True}),
@@ -348,11 +371,16 @@ class MuseImageEditorNode:
     FUNCTION = "edit"
     CATEGORY = "phaulty nodes/Muse"
 
+    @classmethod
+    def IS_CHANGED(cls, seed=0, **kwargs):
+        return seed
+
     def edit(
         self,
         prompt: str,
         reasoning_strength: str,
         mode: str,
+        seed: int = 0,
         previous_response_id: str = None,
         override_response_id: str = "",
         reference_image: torch.Tensor = None,
@@ -560,12 +588,290 @@ class MuseImageArrayNode:
         return (images,)
 
 
+def _call_muse_spark_api(api_key: str, payload: dict) -> tuple:
+    base_url = _get_base_url()
+    endpoint = f"{base_url}/responses"
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "User-Agent": "ComfyUI-MuseImage",
+    }
+
+    req = urllib.request.Request(
+        endpoint,
+        data=json.dumps(payload).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=180) as resp:
+            resp_data = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        err_body = e.read().decode("utf-8", errors="ignore")
+        raise RuntimeError(f"Muse Spark API error ({e.code}): {err_body}")
+
+    new_response_id = resp_data.get("id", "")
+    output_items = resp_data.get("output", [])
+
+    text_content = ""
+    reasoning_summary = ""
+
+    for item in output_items:
+        item_type = item.get("type")
+        if item_type == "message":
+            parts = item.get("content", [])
+            text_content = "".join(
+                p.get("text", "") for p in parts if p.get("type") == "output_text"
+            )
+        elif item_type == "reasoning":
+            summaries = item.get("summary", [])
+            reasoning_summary = "\n".join(
+                s.get("text", "") for s in summaries if s.get("type") == "summary_text"
+            )
+
+    usage = resp_data.get("usage", {})
+    output_tokens = usage.get("output_tokens", 0)
+    reasoning_tokens = usage.get("output_tokens_details", {}).get("reasoning_tokens", 0)
+
+    if not reasoning_summary and (output_tokens or reasoning_tokens):
+        reasoning_summary = f"Tokens: {output_tokens} output ({reasoning_tokens} reasoning)"
+
+    return text_content, new_response_id, reasoning_summary
+
+
+def _parse_spark_output(raw_text: str, include_negative: bool) -> tuple:
+    expanded_prompt = ""
+    negative_prompt = ""
+
+    if "[PROMPT]" in raw_text and "[/PROMPT]" in raw_text:
+        expanded_prompt = raw_text.split("[PROMPT]", 1)[1].split("[/PROMPT]", 1)[0].strip()
+    elif "[PROMPT]" in raw_text:
+        expanded_prompt = raw_text.split("[PROMPT]", 1)[1].strip()
+
+    if include_negative:
+        if "[NEGATIVE]" in raw_text and "[/NEGATIVE]" in raw_text:
+            negative_prompt = raw_text.split("[NEGATIVE]", 1)[1].split("[/NEGATIVE]", 1)[0].strip()
+        elif "[NEGATIVE]" in raw_text:
+            negative_prompt = raw_text.split("[NEGATIVE]", 1)[1].strip()
+
+    if not expanded_prompt:
+        clean = raw_text.strip()
+        if clean.startswith("```") and clean.endswith("```"):
+            lines = clean.splitlines()
+            if len(lines) >= 2:
+                clean = "\n".join(lines[1:-1]).strip()
+        expanded_prompt = clean
+
+    return expanded_prompt, negative_prompt
+
+
+class MuseSparkPromptExpander:
+    """
+    Prompt Expansion node powered by Meta's Muse Spark reasoning model.
+    Expands base ideas into high-detail prompts with controllable architecture styles
+    (modern natural language vs old-school CLIP tags), optional negative prompt generation,
+    custom instruction overrides, and seed-based caching.
+    """
+
+    PRESET_GUIDES = {
+        "photorealistic": (
+            "Focus on authentic realism and camera photography: natural skin/surface micro-textures, "
+            "lens specifications (e.g. 35mm or 85mm f/1.4), accurate real-world lighting, authentic materials, "
+            "depth of field, and lifelike physical detail without artificial gloss."
+        ),
+        "cinematic": (
+            "Focus on cinematic film aesthetics: dramatic anamorphic composition, widescreen framing, "
+            "atmospheric haze or volumetric light, rich color grading, directional rim lighting, and emotional mood."
+        ),
+        "digital_art / anime": (
+            "Focus on high-end stylized digital art, concept art, or anime illustration: expressive line work, "
+            "vibrant color palettes, painterly textures or clean cel shading, dynamic angles, and striking highlights."
+        ),
+        "general_expansion": (
+            "Provide a balanced, versatile enhancement: enrich subject anatomy, setting, atmospheric lighting, "
+            "and composition without over-constraining the visual medium."
+        ),
+        "custom": "Follow the user's custom instructions precisely.",
+    }
+
+    FORMAT_GUIDES = {
+        "natural_language (modern / flux / muse)": (
+            "Format as rich, descriptive natural language prose. Write coherent English sentences "
+            "describing subject, actions, clothing, composition, camera angles, lighting conditions, and textures. "
+            "Avoid keyword stuffing or comma-separated tag spam."
+        ),
+        "clip_l_tags (sd1.5 / sdxl / booru)": (
+            "Format as clean, comma-separated tokens, Danbooru/Booru tags, and quality enhancers suitable "
+            "for CLIP text encoders (e.g., SD 1.5, SDXL base). Prioritize core subjects, clothing, poses, background "
+            "elements, lighting tags, and quality tokens (e.g. masterpiece, sharp focus). Do NOT write full conversational sentences."
+        ),
+    }
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "prompt": (
+                    "STRING",
+                    {
+                        "multiline": True,
+                        "default": "a cybernetic samurai in rain",
+                    },
+                ),
+                "prompt_format": (
+                    [
+                        "natural_language (modern / flux / muse)",
+                        "clip_l_tags (sd1.5 / sdxl / booru)",
+                    ],
+                    {"default": "natural_language (modern / flux / muse)"},
+                ),
+                "preset": (
+                    [
+                        "photorealistic",
+                        "cinematic",
+                        "digital_art / anime",
+                        "general_expansion",
+                        "custom",
+                    ],
+                    {"default": "photorealistic"},
+                ),
+                "include_negative": ("BOOLEAN", {"default": False}),
+                "model": (
+                    [
+                        "muse-spark-1.3",
+                        "muse-spark-1.3-contributor",
+                        "muse-spark-1.2",
+                        "muse-spark-1.2-contributor",
+                        "muse-spark-1.1",
+                    ],
+                    {"default": "muse-spark-1.3"},
+                ),
+                "reasoning_effort": (
+                    ["low", "medium", "high"],
+                    {"default": "low"},
+                ),
+                "seed": (
+                    "INT",
+                    {
+                        "default": 0,
+                        "min": 0,
+                        "max": 0xFFFFFFFFFFFFFFFF,
+                        "control_after_generate": "randomize",
+                    },
+                ),
+            },
+            "optional": {
+                "custom_instructions": ("STRING", {"forceInput": True}),
+                "api_key_override": ("STRING", {"default": "", "multiline": False}),
+            },
+        }
+
+    RETURN_TYPES = ("STRING", "STRING", "STRING")
+    RETURN_NAMES = ("expanded_prompt", "negative_prompt", "reasoning_summary")
+    FUNCTION = "expand"
+    CATEGORY = "phaulty nodes/Muse"
+
+    @classmethod
+    def IS_CHANGED(cls, seed, **kwargs):
+        return seed
+
+    def expand(
+        self,
+        prompt: str,
+        prompt_format: str,
+        preset: str,
+        include_negative: bool,
+        model: str,
+        reasoning_effort: str,
+        seed: int,
+        custom_instructions: str = None,
+        api_key_override: str = "",
+    ):
+        api_key = _get_api_key(api_key_override)
+        if not api_key:
+            raise ValueError(
+                "MODEL_API_KEY is not set or invalid. Please check ComfyUI/custom_nodes/ComfyUI-MuseImage/config.json."
+            )
+
+        format_guide = self.FORMAT_GUIDES.get(
+            prompt_format, self.FORMAT_GUIDES["natural_language (modern / flux / muse)"]
+        )
+        preset_guide = self.PRESET_GUIDES.get(
+            preset, self.PRESET_GUIDES["photorealistic"]
+        )
+
+        if include_negative:
+            neg_instruction = (
+                "Generate both an expanded positive prompt and a targeted negative prompt to eliminate common artifacts "
+                "or unwanted elements for this subject and style."
+            )
+            format_structure = (
+                "Strict Output Format:\n"
+                "[PROMPT]\n"
+                "your expanded positive prompt here\n"
+                "[/PROMPT]\n"
+                "[NEGATIVE]\n"
+                "your tailored negative prompt here\n"
+                "[/NEGATIVE]\n"
+                "Do NOT include any conversational filler, notes, or markdown fences outside these tags."
+            )
+        else:
+            neg_instruction = (
+                "The target image model does NOT support or use negative prompts (e.g. distilled or modern architecture). "
+                "Incorporate all quality, cleanliness, lighting, and detail guidance directly into the positive prompt. "
+                "Do NOT output or mention a negative prompt."
+            )
+            format_structure = (
+                "Strict Output Format:\n"
+                "[PROMPT]\n"
+                "your expanded positive prompt here\n"
+                "[/PROMPT]\n"
+                "Do NOT include any conversational filler, notes, or markdown fences outside these tags."
+            )
+
+        instructions_parts = [
+            "You are an expert AI prompt engineer for image generation.",
+            f"Format requirement: {format_guide}",
+        ]
+
+        if preset == "custom" and custom_instructions and custom_instructions.strip():
+            instructions_parts.append(f"Instructions: {custom_instructions.strip()}")
+        else:
+            instructions_parts.append(f"Aesthetic guidance: {preset_guide}")
+            if custom_instructions and custom_instructions.strip():
+                instructions_parts.append(f"Additional instructions: {custom_instructions.strip()}")
+
+        instructions_parts.append(f"Negative prompt guidance: {neg_instruction}")
+        instructions_parts.append(format_structure)
+
+        instructions = "\n\n".join(instructions_parts)
+
+        payload = {
+            "model": model,
+            "instructions": instructions,
+            "input": prompt,
+            "reasoning": {
+                "effort": reasoning_effort,
+                "summary": "detailed",
+            },
+            "store": True,
+        }
+
+        raw_text, response_id, reasoning_summary = _call_muse_spark_api(api_key, payload)
+        expanded_prompt, negative_prompt = _parse_spark_output(raw_text, include_negative)
+
+        return (expanded_prompt, negative_prompt, reasoning_summary)
+
+
 NODE_CLASS_MAPPINGS = {
     "MuseImageNode": MuseImageNode,
     "MuseImageEditorNode": MuseImageEditorNode,
     "MuseShowTextNode": MuseShowTextNode,
     "MuseSwitchNode": MuseSwitchNode,
     "MuseImageArrayNode": MuseImageArrayNode,
+    "MuseSparkPromptExpander": MuseSparkPromptExpander,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -574,5 +880,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "MuseShowTextNode": "Meta Muse Show Text / Reasoning",
     "MuseSwitchNode": "Meta Muse Mode Switch",
     "MuseImageArrayNode": "Meta Muse Image Array",
+    "MuseSparkPromptExpander": "Meta Muse Spark Prompt Expander",
 }
 

@@ -26,11 +26,31 @@ Custom ComfyUI nodes for generating and iteratively editing images using Meta's 
 
 Nodes are located under the **`phaulty nodes` &rsaquo; `Muse`** category:
 
-- **Meta Muse Image (`MuseImageNode`)**: Text-to-image and image-to-image generation. Outputs the generated `IMAGE`, `response_id`, and `reasoning_summary`.
-- **Meta Muse Image Editor / Refiner (`MuseImageEditorNode`)**: Iterative multi-turn image editing.
-- **Meta Muse Show Text / Reasoning (`MuseShowTextNode`)**: Lightweight canvas display node to view reasoning logs and IDs.
+- **Meta Muse Image (`MuseImageNode`)**: Text-to-image and image-to-image generation with seed-based cache control. Outputs the generated `IMAGE`, `response_id`, and `reasoning_summary`.
+- **Meta Muse Image Editor / Refiner (`MuseImageEditorNode`)**: Iterative multi-turn image editing with seed-based cache control.
+- **Meta Muse Spark Prompt Expander (`MuseSparkPromptExpander`)**: Prompt expansion powered by Meta's Muse Spark reasoning models. Supports modern natural language or old-school CLIP tags, optional negative prompt generation, aesthetic presets, custom instruction overrides, and fake seed caching.
+- **Meta Muse Show Text / Reasoning (`MuseShowTextNode`)**: Lightweight canvas display node to view reasoning logs, prompts, and IDs.
 - **Meta Muse Mode Switch (`MuseSwitchNode`)**: Routes between initial generation and iterative editor outputs (`IMAGE`, `reasoning_summary`, and `response_id`) to drive a single `SaveImage` / `MuseShowTextNode`, avoiding duplicate saved images and allowing dynamic response ID file naming.
 - **Meta Muse Image Array (`MuseImageArrayNode`)**: Combines multiple reference images of different resolutions or aspect ratios into an image bundle (`MUSE_IMAGES`) without requiring resizing or cropping. Supports chaining for unlimited reference images.
+
+---
+
+## Prompt Expansion (`MuseSparkPromptExpander`)
+
+The **Muse Spark Prompt Expander** node transforms brief ideas into rich, high-fidelity prompts:
+
+- **`prompt_format`**:
+  - `natural_language (modern / flux / muse)`: Descriptive prose covering subject, lighting, composition, and texture.
+  - `clip_l_tags (sd1.5 / sdxl / booru)`: Comma-separated CLIP tokens, quality tags, and booru keywords tailored for older or tag-based models.
+- **`include_negative`**:
+  - `False` *(default)*: Optimized for distilled / modern models. Instructs the model not to rely on negative prompts and embeds all quality directives directly into the positive prompt. Negative prompt output is empty (`""`).
+  - `True`: Generates both an expanded positive prompt and a tailored negative prompt to eliminate common artifacts.
+- **`seed`**: Standard ComfyUI seed widget (`fixed`, `randomize`, etc.) to control whether prompts remain cached or generate fresh variations on execution.
+- **`custom_instructions`**: Optional string input socket to override or supplement the prompt generation instructions.
+- **Outputs**:
+  - `expanded_prompt`: The expanded positive prompt.
+  - `negative_prompt`: The negative prompt (when enabled).
+  - `reasoning_summary`: Token statistics or reasoning summary (can be plugged into **Muse Show Text** to view on canvas).
 
 ---
 
