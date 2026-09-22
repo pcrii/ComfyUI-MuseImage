@@ -641,22 +641,56 @@ def _call_muse_spark_api(api_key: str, payload: dict) -> tuple:
     return text_content, new_response_id, reasoning_summary
 
 
+def _extract_tag_content(text: str, tag: str) -> str:
+    for t in (tag, tag.lower(), tag.upper()):
+        start_tag = f"[{t}]"
+        end_tag = f"[/{t}]"
+        if start_tag in text and end_tag in text:
+            return text.split(start_tag, 1)[1].split(end_tag, 1)[0].strip()
+        elif start_tag in text:
+            after = text.split(start_tag, 1)[1]
+            next_tag_idx = after.find("[")
+            if next_tag_idx != -1:
+                return after[:next_tag_idx].strip()
+            return after.strip()
+    return ""
+
+
 def _parse_spark_output(raw_text: str, include_negative: bool) -> tuple:
     expanded_prompt = ""
     negative_prompt = ""
+    prompt_g = ""
+    prompt_l = ""
 
-    if "[PROMPT]" in raw_text and "[/PROMPT]" in raw_text:
-        expanded_prompt = raw_text.split("[PROMPT]", 1)[1].split("[/PROMPT]", 1)[0].strip()
-    elif "[PROMPT]" in raw_text:
-        expanded_prompt = raw_text.split("[PROMPT]", 1)[1].strip()
+    prompt_g = (
+        _extract_tag_content(raw_text, "PROMPT_G")
+        or _extract_tag_content(raw_text, "CLIP_G")
+        or _extract_tag_content(raw_text, "TEXT_G")
+    )
+    prompt_l = (
+        _extract_tag_content(raw_text, "PROMPT_L")
+        or _extract_tag_content(raw_text, "CLIP_L")
+        or _extract_tag_content(raw_text, "TEXT_L")
+    )
+
+    explicit_prompt = _extract_tag_content(raw_text, "PROMPT")
+
+    if explicit_prompt:
+        expanded_prompt = explicit_prompt
+    elif prompt_g and prompt_l:
+        expanded_prompt = f"{prompt_g}\n\n{prompt_l}"
+    elif prompt_g:
+        expanded_prompt = prompt_g
+    elif prompt_l:
+        expanded_prompt = prompt_l
 
     if include_negative:
-        if "[NEGATIVE]" in raw_text and "[/NEGATIVE]" in raw_text:
-            negative_prompt = raw_text.split("[NEGATIVE]", 1)[1].split("[/NEGATIVE]", 1)[0].strip()
-        elif "[NEGATIVE]" in raw_text:
-            negative_prompt = raw_text.split("[NEGATIVE]", 1)[1].strip()
+        negative_prompt = (
+            _extract_tag_content(raw_text, "NEGATIVE")
+            or _extract_tag_content(raw_text, "NEGATIVE_PROMPT")
+        )
 
-    if not expanded_prompt:
+    if not expanded_prompt and not prompt_g:
         clean = raw_text.strip()
         if clean.startswith("```") and clean.endswith("```"):
             lines = clean.splitlines()
@@ -664,15 +698,20 @@ def _parse_spark_output(raw_text: str, include_negative: bool) -> tuple:
                 clean = "\n".join(lines[1:-1]).strip()
         expanded_prompt = clean
 
-    return expanded_prompt, negative_prompt
+    if not prompt_g:
+        prompt_g = expanded_prompt
+    if not prompt_l:
+        prompt_l = expanded_prompt
+
+    return expanded_prompt, negative_prompt, prompt_g, prompt_l
 
 
 class MuseSparkPromptExpander:
     """
     Prompt Expansion node powered by Meta's Muse Spark reasoning model.
     Expands base ideas into high-detail prompts with controllable architecture styles
-    (modern natural language vs old-school CLIP tags), optional negative prompt generation,
-    custom instruction overrides, and seed-based caching.
+    (modern natural language vs old-school CLIP tags vs SDXL dual encoders), optional
+    negative prompt generation, custom instruction overrides, and seed-based caching.
     """
 
     PRESET_GUIDES = {
@@ -716,6 +755,16 @@ class MuseSparkPromptExpander:
             "describing subject, actions, clothing, composition, camera angles, lighting conditions, and textures. "
             "Avoid keyword stuffing or comma-separated tag spam."
         ),
+        "sdxl (dual clip_g + clip_l)": (
+            "Format specifically for SDXL dual text encoders: [PROMPT_G] with rich, descriptive natural language "
+            "prose describing scene composition, atmosphere, lighting, and visual narrative for OpenCLIP ViT-bigG, "
+            "and [PROMPT_L] with clean comma-separated tokens, subject details, clothing, and quality enhancers for OpenAI CLIP ViT-L."
+        ),
+        "clip_l_tags (sd1.5 / booru)": (
+            "Format as clean, comma-separated tokens, Danbooru/Booru tags, and quality enhancers suitable "
+            "for CLIP text encoders (e.g., SD 1.5). Prioritize core subjects, clothing, poses, background "
+            "elements, lighting tags, and quality tokens (e.g. masterpiece, sharp focus). Do NOT write full conversational sentences."
+        ),
         "clip_l_tags (sd1.5 / sdxl / booru)": (
             "Format as clean, comma-separated tokens, Danbooru/Booru tags, and quality enhancers suitable "
             "for CLIP text encoders (e.g., SD 1.5, SDXL base). Prioritize core subjects, clothing, poses, background "
@@ -733,6 +782,20 @@ class MuseSparkPromptExpander:
             "Format strictly as a MiniMax H3 three-section video/audio screenplay (alias for fl2va)."
         ),
     }
+
+    SDXL_DUAL_INSTRUCTIONS = (
+        "You are an expert AI prompt engineer specializing in Stable Diffusion XL (SDXL).\n"
+        "SDXL employs a dual text-encoder architecture consisting of two distinct models:\n"
+        "1. OpenCLIP ViT-bigG (CLIP-G / text_g): High-capacity encoder (1280 dim) that excels at natural language prose, visual context, "
+        "scene composition, atmosphere, lighting, camera angles, and aesthetic narrative. Write coherent English sentences without comma-separated tag lists.\n"
+        "2. OpenAI CLIP ViT-L (CLIP-L / text_l): Sensitive to specific concept tokens (768 dim), comma-separated keywords, Danbooru/booru tags, "
+        "clothing details, textures, and quality enhancers.\n\n"
+        "Your task is to expand the user's idea into two synergistic prompts:\n"
+        "- [PROMPT_G]: Rich, descriptive natural language prose for CLIP-G describing the entire visual scene, "
+        "subject action/posture, composition, camera framing, lighting, color palette, and mood.\n"
+        "- [PROMPT_L]: Clean comma-separated tokens and tags for CLIP-L emphasizing specific subjects, "
+        "clothing, physical details, textures, and quality boosters (e.g. masterpiece, sharp focus, intricate details).\n"
+    )
 
     MINIMAX_H3_FL2VA_INSTRUCTIONS = (
         "You are an expert AI director and screenplay prompt engineer for MiniMax H3 FL2VA / I2VA / T2VA "
@@ -830,6 +893,8 @@ class MuseSparkPromptExpander:
                 "prompt_format": (
                     [
                         "natural_language (modern / flux / muse)",
+                        "sdxl (dual clip_g + clip_l)",
+                        "clip_l_tags (sd1.5 / booru)",
                         "clip_l_tags (sd1.5 / sdxl / booru)",
                         "minimax_h3_fl2va (first frame + audio timeline)",
                         "minimax_h3_ref2va (6-section multi-reference)",
@@ -883,8 +948,8 @@ class MuseSparkPromptExpander:
             },
         }
 
-    RETURN_TYPES = ("STRING", "STRING", "STRING")
-    RETURN_NAMES = ("expanded_prompt", "negative_prompt", "reasoning_summary")
+    RETURN_TYPES = ("STRING", "STRING", "STRING", "STRING", "STRING")
+    RETURN_NAMES = ("expanded_prompt", "negative_prompt", "reasoning_summary", "prompt_g", "prompt_l")
     FUNCTION = "expand"
     CATEGORY = "phaulty nodes/Muse"
 
@@ -921,6 +986,9 @@ class MuseSparkPromptExpander:
         is_fl2va = (
             preset in ("minimax_h3_fl2va (first frame + audio guide)", "minimax_h3 (video + audio director)")
             or prompt_format in ("minimax_h3_fl2va (first frame + audio timeline)", "minimax_h3 (video + audio timeline)")
+        )
+        is_sdxl_dual = (
+            prompt_format in ("sdxl (dual clip_g + clip_l)", "sdxl_dual (clip_g prose + clip_l tags)")
         )
 
         if is_ref2va:
@@ -1035,6 +1103,59 @@ class MuseSparkPromptExpander:
                 )
             instructions_parts.append(format_structure)
             instructions = "\n\n".join(instructions_parts)
+
+        elif is_sdxl_dual:
+            format_structure = (
+                "Strict Output Format:\n"
+                "[PROMPT_G]\n"
+                "your descriptive natural language prose for CLIP-G (OpenCLIP ViT-bigG) here\n"
+                "[/PROMPT_G]\n"
+                "[PROMPT_L]\n"
+                "your clean comma-separated tokens and detail tags for CLIP-L (OpenAI CLIP ViT-L) here\n"
+                "[/PROMPT_L]\n"
+            )
+            if include_negative:
+                format_structure += (
+                    "[NEGATIVE]\n"
+                    "your tailored SDXL negative prompt here\n"
+                    "[/NEGATIVE]\n"
+                )
+            format_structure += "Do NOT include any conversational filler, notes, or markdown fences outside these tags."
+
+            preset_guide = self.PRESET_GUIDES.get(
+                preset, self.PRESET_GUIDES["photorealistic"]
+            )
+            instructions_parts = [
+                self.SDXL_DUAL_INSTRUCTIONS,
+                "Format requirement: [PROMPT_G] MUST be descriptive natural language prose for OpenCLIP bigG. [PROMPT_L] MUST be clean comma-separated tokens and detail tags for CLIP-L.",
+            ]
+            if images:
+                instructions_parts.append(
+                    f"Reference Image(s) Attached: You have received {len(images)} reference image(s). "
+                    "Carefully inspect their visual elements (subjects, appearance, clothing, lighting, textures, "
+                    "color palette, composition, environment). Use these visual cues to ground, inspire, and enrich "
+                    "both PROMPT_G and PROMPT_L, incorporating specific details from the images while executing the user's concept."
+                )
+
+            if preset == "custom" and custom_instructions and custom_instructions.strip():
+                instructions_parts.append(f"Instructions: {custom_instructions.strip()}")
+            else:
+                instructions_parts.append(f"Aesthetic guidance: {preset_guide}")
+                if custom_instructions and custom_instructions.strip():
+                    instructions_parts.append(f"Additional instructions: {custom_instructions.strip()}")
+
+            if include_negative:
+                instructions_parts.append(
+                    "Negative prompt guidance: Generate a tailored negative prompt for SDXL to suppress common artifacts, "
+                    "anatomical deformities, bad hands, blurriness, pixelation, watermarks, and unwanted styling."
+                )
+            else:
+                instructions_parts.append(
+                    "Negative prompt guidance: Do NOT output a negative prompt."
+                )
+
+            instructions_parts.append(format_structure)
+            instructions = "\n\n".join(instructions_parts)
         else:
             format_guide = self.FORMAT_GUIDES.get(
                 prompt_format, self.FORMAT_GUIDES["natural_language (modern / flux / muse)"]
@@ -1123,9 +1244,252 @@ class MuseSparkPromptExpander:
             payload["input"] = prompt
 
         raw_text, response_id, reasoning_summary = _call_muse_spark_api(api_key, payload)
-        expanded_prompt, negative_prompt = _parse_spark_output(raw_text, include_negative)
+        expanded_prompt, negative_prompt, prompt_g, prompt_l = _parse_spark_output(raw_text, include_negative)
 
-        return (expanded_prompt, negative_prompt, reasoning_summary)
+        return (expanded_prompt, negative_prompt, reasoning_summary, prompt_g, prompt_l)
+
+
+class MuseSparkSDXLExpander:
+    """
+    Dedicated SDXL Prompt Expansion node powered by Meta's Muse Spark reasoning model.
+    Specifically architects prompts for SDXL's dual text encoders:
+    - prompt_g (OpenCLIP ViT-bigG / text_g): Rich natural language prose describing scene composition, atmosphere, lighting, camera angles, and visual narrative.
+    - prompt_l (OpenAI CLIP ViT-L / text_l): Clean comma-separated tokens, Danbooru/booru tags, subject/clothing micro-details, and quality boosters.
+    - negative_prompt: Tailored negative prompt designed for SDXL to eliminate deformities, artifacts, and blur.
+    - expanded_prompt: Combined prompt (prompt_g + prompt_l) for single-input pipelines.
+    - reasoning_summary: Model reasoning tokens or summary.
+    """
+
+    SDXL_DUAL_INSTRUCTIONS = (
+        "You are an expert AI prompt engineer specializing in Stable Diffusion XL (SDXL).\n"
+        "SDXL employs a dual text-encoder architecture consisting of two distinct models:\n"
+        "1. OpenCLIP ViT-bigG (CLIP-G / text_g): High-capacity encoder (1280 dim) that excels at natural language prose, visual context, "
+        "scene composition, atmosphere, lighting, camera angles, and aesthetic narrative. Write coherent English sentences without comma-separated tag lists.\n"
+        "2. OpenAI CLIP ViT-L (CLIP-L / text_l): Sensitive to specific concept tokens (768 dim), comma-separated keywords, Danbooru/booru tags, "
+        "clothing details, textures, and quality enhancers.\n\n"
+        "Your task is to expand the user's idea into two synergistic prompts:\n"
+        "- [PROMPT_G]: Rich, descriptive natural language prose for CLIP-G describing the entire visual scene, "
+        "subject action/posture, composition, camera framing, lighting, color palette, and mood.\n"
+        "- [PROMPT_L]: Clean comma-separated tokens and tags for CLIP-L emphasizing specific subjects, "
+        "clothing, physical details, textures, and quality boosters (e.g. masterpiece, sharp focus, intricate details).\n"
+    )
+
+    PRESET_GUIDES = {
+        "photorealistic": (
+            "Focus on authentic realism and camera photography: natural skin/surface micro-textures, "
+            "lens specifications (e.g. 35mm or 85mm f/1.4), accurate real-world lighting, authentic materials, "
+            "depth of field, and lifelike physical detail without artificial gloss."
+        ),
+        "cinematic": (
+            "Focus on cinematic film aesthetics: dramatic anamorphic composition, widescreen framing, "
+            "atmospheric haze or volumetric light, rich color grading, directional rim lighting, and emotional mood."
+        ),
+        "anime / manga": (
+            "Focus on anime and manga illustration aesthetics: expressive character design, dynamic framing, "
+            "vibrant or cel-shaded palette, crisp line work, beautiful anime eyes, hair highlights, and clean composition."
+        ),
+        "digital_art / concept_art": (
+            "Focus on high-end stylized digital art and concept illustration: dramatic fantasy or sci-fi mood, "
+            "rich painterly textures, intricate environmental details, stylized color keys, and striking visual storytelling."
+        ),
+        "general_expansion": (
+            "Provide a balanced, versatile enhancement: enrich subject anatomy, setting, atmospheric lighting, "
+            "and composition without over-constraining the visual medium."
+        ),
+        "custom": "Follow the user's custom instructions precisely.",
+    }
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "prompt": (
+                    "STRING",
+                    {
+                        "multiline": True,
+                        "default": "a cybernetic samurai in rain",
+                    },
+                ),
+                "preset": (
+                    [
+                        "photorealistic",
+                        "cinematic",
+                        "anime / manga",
+                        "digital_art / concept_art",
+                        "general_expansion",
+                        "custom",
+                    ],
+                    {"default": "photorealistic"},
+                ),
+                "dual_format": (
+                    [
+                        "clip_g prose + clip_l tags (recommended)",
+                        "clip_g prose + clip_l prose",
+                        "clip_g tags + clip_l tags",
+                    ],
+                    {"default": "clip_g prose + clip_l tags (recommended)"},
+                ),
+                "include_negative": ("BOOLEAN", {"default": True}),
+                "model": (
+                    [
+                        "muse-spark-1.3",
+                        "muse-spark-1.3-contributor",
+                        "muse-spark-1.2",
+                        "muse-spark-1.2-contributor",
+                        "muse-spark-1.1",
+                    ],
+                    {"default": "muse-spark-1.3"},
+                ),
+                "reasoning_effort": (
+                    ["low", "medium", "high"],
+                    {"default": "low"},
+                ),
+                "seed": (
+                    "INT",
+                    {
+                        "default": 0,
+                        "min": 0,
+                        "max": 0xFFFFFFFFFFFFFFFF,
+                        "control_after_generate": "fixed",
+                    },
+                ),
+            },
+            "optional": {
+                "reference_image": ("IMAGE",),
+                "reference_images": ("MUSE_IMAGES",),
+                "custom_instructions": ("STRING", {"forceInput": True}),
+                "api_key_override": ("STRING", {"default": "", "multiline": False}),
+            },
+        }
+
+    RETURN_TYPES = ("STRING", "STRING", "STRING", "STRING", "STRING")
+    RETURN_NAMES = ("prompt_g", "prompt_l", "negative_prompt", "expanded_prompt", "reasoning_summary")
+    FUNCTION = "expand"
+    CATEGORY = "phaulty nodes/Muse"
+
+    @classmethod
+    def IS_CHANGED(cls, seed, **kwargs):
+        return seed
+
+    def expand(
+        self,
+        prompt: str,
+        preset: str,
+        dual_format: str,
+        include_negative: bool,
+        model: str,
+        reasoning_effort: str,
+        seed: int,
+        reference_image: torch.Tensor = None,
+        reference_images: list = None,
+        custom_instructions: str = None,
+        api_key_override: str = "",
+    ):
+        api_key = _get_api_key(api_key_override)
+        if not api_key:
+            raise ValueError(
+                "MODEL_API_KEY is not set or invalid. Please check ComfyUI/custom_nodes/ComfyUI-MuseImage/config.json."
+            )
+
+        images = _extract_images(reference_image, reference_images)
+        preset_guide = self.PRESET_GUIDES.get(preset, self.PRESET_GUIDES["photorealistic"])
+
+        if dual_format == "clip_g prose + clip_l prose":
+            format_rule = (
+                "Format requirement: Both [PROMPT_G] and [PROMPT_L] should be rich, coherent natural language sentences. "
+                "[PROMPT_G] should focus on scene context, lighting, and composition; [PROMPT_L] should focus on detailed subject appearance and action."
+            )
+        elif dual_format == "clip_g tags + clip_l tags":
+            format_rule = (
+                "Format requirement: Both [PROMPT_G] and [PROMPT_L] should be clean, comma-separated tokens and quality tags. "
+                "[PROMPT_G] for high-level scene/style tags, [PROMPT_L] for subject, attire, and detail tags."
+            )
+        else:
+            format_rule = (
+                "Format requirement: [PROMPT_G] MUST be descriptive natural language prose for OpenCLIP bigG (no tag lists). "
+                "[PROMPT_L] MUST be clean comma-separated tokens, booru tags, and detail keywords for OpenAI CLIP-L (no full sentences)."
+            )
+
+        format_structure = (
+            "Strict Output Format:\n"
+            "[PROMPT_G]\n"
+            "your text for CLIP-G (OpenCLIP ViT-bigG) here\n"
+            "[/PROMPT_G]\n"
+            "[PROMPT_L]\n"
+            "your text for CLIP-L (OpenAI CLIP ViT-L) here\n"
+            "[/PROMPT_L]\n"
+        )
+        if include_negative:
+            format_structure += (
+                "[NEGATIVE]\n"
+                "your tailored SDXL negative prompt here\n"
+                "[/NEGATIVE]\n"
+            )
+        format_structure += "Do NOT include any conversational filler, notes, or markdown fences outside these tags."
+
+        instructions_parts = [
+            self.SDXL_DUAL_INSTRUCTIONS,
+            format_rule,
+        ]
+
+        if images:
+            instructions_parts.append(
+                f"Reference Image(s) Attached: You have received {len(images)} reference image(s). "
+                "Carefully inspect their visual elements (subjects, appearance, clothing, lighting, textures, "
+                "color palette, composition, environment). Use these visual cues to ground, inspire, and enrich "
+                "both PROMPT_G and PROMPT_L, incorporating specific details from the images while executing the user's concept."
+            )
+
+        if preset == "custom" and custom_instructions and custom_instructions.strip():
+            instructions_parts.append(f"Instructions: {custom_instructions.strip()}")
+        else:
+            instructions_parts.append(f"Aesthetic guidance: {preset_guide}")
+            if custom_instructions and custom_instructions.strip():
+                instructions_parts.append(f"Additional instructions: {custom_instructions.strip()}")
+
+        if include_negative:
+            instructions_parts.append(
+                "Negative prompt guidance: Generate a tailored negative prompt for SDXL to suppress common artifacts, "
+                "anatomical deformities, bad hands, extra limbs, blurriness, pixelation, watermarks, and signature tokens, "
+                "harmonized with the selected aesthetic."
+            )
+        else:
+            instructions_parts.append(
+                "Negative prompt guidance: Do NOT output a negative prompt."
+            )
+
+        instructions_parts.append(format_structure)
+        instructions = "\n\n".join(instructions_parts)
+
+        payload = {
+            "model": model,
+            "instructions": instructions,
+            "reasoning": {
+                "effort": reasoning_effort,
+                "summary": "detailed",
+            },
+            "store": True,
+        }
+
+        if images:
+            input_text = prompt if prompt and prompt.strip() else "Analyze the provided reference image(s) and expand into an SDXL dual prompt."
+            content = [{"type": "input_text", "text": input_text}]
+            for img in images:
+                image_data_url = _tensor_to_data_url(img)
+                content.append({"type": "input_image", "image_url": image_data_url})
+            payload["input"] = [
+                {
+                    "role": "user",
+                    "content": content,
+                }
+            ]
+        else:
+            payload["input"] = prompt
+
+        raw_text, response_id, reasoning_summary = _call_muse_spark_api(api_key, payload)
+        expanded_prompt, negative_prompt, prompt_g, prompt_l = _parse_spark_output(raw_text, include_negative)
+
+        return (prompt_g, prompt_l, negative_prompt, expanded_prompt, reasoning_summary)
 
 
 NODE_CLASS_MAPPINGS = {
@@ -1135,6 +1499,7 @@ NODE_CLASS_MAPPINGS = {
     "MuseSwitchNode": MuseSwitchNode,
     "MuseImageArrayNode": MuseImageArrayNode,
     "MuseSparkPromptExpander": MuseSparkPromptExpander,
+    "MuseSparkSDXLExpander": MuseSparkSDXLExpander,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -1144,5 +1509,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "MuseSwitchNode": "Meta Muse Mode Switch",
     "MuseImageArrayNode": "Meta Muse Image Array",
     "MuseSparkPromptExpander": "Meta Muse Spark Prompt Expander",
+    "MuseSparkSDXLExpander": "Meta Muse Spark SDXL Prompt Expander",
 }
 

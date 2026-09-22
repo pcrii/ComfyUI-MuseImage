@@ -28,34 +28,51 @@ Nodes are located under the **`phaulty nodes` &rsaquo; `Muse`** category:
 
 - **Meta Muse Image (`MuseImageNode`)**: Text-to-image and image-to-image generation with seed-based cache control. Outputs the generated `IMAGE`, `response_id`, and `reasoning_summary`.
 - **Meta Muse Image Editor / Refiner (`MuseImageEditorNode`)**: Iterative multi-turn image editing with seed-based cache control.
-- **Meta Muse Spark Prompt Expander (`MuseSparkPromptExpander`)**: Prompt expansion powered by Meta's Muse Spark reasoning models. Supports modern natural language or old-school CLIP tags, optional negative prompt generation, aesthetic presets, custom instruction overrides, and fake seed caching.
+- **Meta Muse Spark Prompt Expander (`MuseSparkPromptExpander`)**: Prompt expansion powered by Meta's Muse Spark reasoning models. Supports modern natural language, dedicated SDXL dual encoders (`prompt_g` and `prompt_l`), or classic CLIP tags, optional negative prompt generation, aesthetic presets, custom instruction overrides, and fake seed caching.
+- **Meta Muse Spark SDXL Prompt Expander (`MuseSparkSDXLExpander`)**: Dedicated prompt expansion engineered specifically for Stable Diffusion XL's dual text-encoder architecture. Outputs `prompt_g` (for OpenCLIP ViT-bigG / `text_g`) and `prompt_l` (for OpenAI CLIP ViT-L / `text_l`) directly, plus tailored SDXL negative prompts.
 - **Meta Muse Show Text / Reasoning (`MuseShowTextNode`)**: Lightweight canvas display node to view reasoning logs, prompts, and IDs.
 - **Meta Muse Mode Switch (`MuseSwitchNode`)**: Routes between initial generation and iterative editor outputs (`IMAGE`, `reasoning_summary`, and `response_id`) to drive a single `SaveImage` / `MuseShowTextNode`, avoiding duplicate saved images and allowing dynamic response ID file naming.
 - **Meta Muse Image Array (`MuseImageArrayNode`)**: Combines multiple reference images of different resolutions or aspect ratios into an image bundle (`MUSE_IMAGES`) without requiring resizing or cropping. Supports chaining for unlimited reference images.
 
 ---
 
-## Prompt Expansion (`MuseSparkPromptExpander`)
+## Prompt Expansion (`MuseSparkPromptExpander` & `MuseSparkSDXLExpander`)
 
-The **Muse Spark Prompt Expander** node transforms brief ideas into rich, high-fidelity prompts:
+### 1. Dedicated SDXL Expander (`Meta Muse Spark SDXL Prompt Expander`)
+Engineered from the ground up for SDXL's dual text-encoder architecture:
+- **`dual_format`**:
+  - `clip_g prose + clip_l tags (recommended)`: Generates rich, coherent natural language prose for **OpenCLIP ViT-bigG** (`text_g` focusing on overall scene, lighting, composition, and mood) while generating clean comma-separated tokens, booru tags, and detail keywords for **OpenAI CLIP ViT-L** (`text_l` focusing on specific subjects, clothing, textures, and quality boosters).
+  - `clip_g prose + clip_l prose`: Coherent descriptive prose for both encoders.
+  - `clip_g tags + clip_l tags`: Comma-separated tokens and quality tags for both encoders.
+- **`preset`**: `photorealistic`, `cinematic`, `anime / manga`, `digital_art / concept_art`, `general_expansion`, and `custom`.
+- **`include_negative`**: Enabled by default (`True`). Produces a tailored negative prompt suppressing SDXL artifacts, bad anatomy, blur, and distortion.
+- **Outputs**:
+  - `prompt_g`: Connects directly to `text_g` on `CLIPTextEncodeSDXL`.
+  - `prompt_l`: Connects directly to `text_l` on `CLIPTextEncodeSDXL`.
+  - `negative_prompt`: Connects to negative `CLIPTextEncodeSDXL` (`text_g` & `text_l`).
+  - `expanded_prompt`: Combined prompt (`prompt_g` + `prompt_l`) for single-input workflows.
+  - `reasoning_summary`: Token usage / reasoning details for `MuseShowTextNode`.
 
+### 2. General Expander (`Meta Muse Spark Prompt Expander`)
+The multi-architecture expander transforms brief ideas into rich prompts across diverse models:
 - **`prompt_format`**:
   - `natural_language (modern / flux / muse)`: Descriptive prose covering subject, lighting, composition, and texture.
-  - `clip_l_tags (sd1.5 / sdxl / booru)`: Comma-separated CLIP tokens, quality tags, and booru keywords tailored for older or tag-based models.
-  - `minimax_h3_fl2va (first frame + audio timeline)`: Formats into keyframe alignment header + 3-section video/audio timeline (`integrated_multimodal_description`, `overall_soundscape`, `non_diegetic_music`). Diegetic singing/dialogue is tagged with speaker `(S1)` and `<d>[Language] lyrics</d>`, and latent-guided audio is guided via acoustic features (no `<Audio 1>` prompt tags).
-  - `minimax_h3_ref2va (6-section multi-reference)`: Formats strictly into the official MiniMax H3 6-section rewrite structure (`subject_definitions`, `summary`, `retention_analysis`, `detailed_description`, `overall_soundscape`, `non_diegetic_music`) with tokenized `<Picture 1>`..`<Picture 9>` and `<Audio 1>`..`<Audio 3>`.
+  - `sdxl (dual clip_g + clip_l)`: Dual-encoder expansion splitting into `prompt_g` prose and `prompt_l` tags.
+  - `clip_l_tags (sd1.5 / booru)`: Comma-separated CLIP tokens, quality tags, and booru keywords tailored for SD 1.5.
+  - `clip_l_tags (sd1.5 / sdxl / booru)`: Backwards-compatible alias for existing workflows.
+  - `minimax_h3_fl2va (first frame + audio timeline)`: Keyframe alignment header + 3-section video/audio timeline (`integrated_multimodal_description`, `overall_soundscape`, `non_diegetic_music`).
+  - `minimax_h3_ref2va (6-section multi-reference)`: MiniMax H3 6-section rewrite structure with `<Picture 1>`..`<Picture 9>` and `<Audio 1>`..`<Audio 3>`.
   - `minimax_h3 (video + audio timeline)`: Backwards-compatible alias for `fl2va`.
-- **`preset`**: Includes `photorealistic`, `cinematic`, `digital_art / anime`, `general_expansion`, `minimax_h3_fl2va (first frame + audio guide)`, `minimax_h3_ref2va (multi-reference r2v)`, `minimax_h3 (video + audio director)` (alias), and `custom`.
-- **`include_negative`**:
-  - `False` *(default)*: Optimized for distilled / modern models. Instructs the model not to rely on negative prompts and embeds all quality directives directly into the positive prompt. Negative prompt output is empty (`""`).
-  - `True`: Generates both an expanded positive prompt and a tailored negative prompt to eliminate common artifacts.
-- **`seed`**: Standard ComfyUI seed widget (defaults to `fixed` so generated prompts stay locked across queues until you manually re-roll or randomize).
-- **`reference_image` / `reference_images`**: Optional single image or array from `Meta Muse Image Array` (`MUSE_IMAGES`). Muse Spark's multimodal vision encoder directly inspects the visual features, composition, colors, and characters of your references to ground and enrich the expanded prompt.
-- **`custom_instructions`**: Optional string input socket to override or supplement the prompt generation instructions.
+- **`preset`**: Includes `photorealistic`, `cinematic`, `digital_art / anime`, `general_expansion`, `minimax_h3_fl2va (first frame + audio guide)`, `minimax_h3_ref2va (multi-reference r2v)`, `minimax_h3 (video + audio director)`, and `custom`.
+- **`include_negative`**: Optional negative prompt generation (`False` by default for distilled/modern models).
+- **`seed`**: Standard ComfyUI seed widget with cache locking.
+- **`reference_image` / `reference_images`**: Ground prompt expansion in reference image features.
 - **Outputs**:
-  - `expanded_prompt`: The expanded positive prompt.
-  - `negative_prompt`: The negative prompt (when enabled).
-  - `reasoning_summary`: Token statistics or reasoning summary (can be plugged into **Muse Show Text** to view on canvas).
+  - `expanded_prompt`: Primary positive prompt.
+  - `negative_prompt`: Tailored negative prompt (when enabled).
+  - `reasoning_summary`: Reasoning statistics for canvas display.
+  - `prompt_g`: CLIP-G prompt (populated for SDXL dual mode, falls back to expanded prompt).
+  - `prompt_l`: CLIP-L prompt (populated for SDXL dual mode, falls back to expanded prompt).
 
 ---
 
