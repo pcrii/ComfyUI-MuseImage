@@ -1341,6 +1341,30 @@ class MuseSparkSDXLExpander:
     SDXL_DUAL_INSTRUCTIONS = MuseSparkPromptExpander.SDXL_DUAL_INSTRUCTIONS
     PONY_SDXL_INSTRUCTIONS = MuseSparkPromptExpander.PONY_SDXL_INSTRUCTIONS
 
+    SDXL_UNIFIED_INSTRUCTIONS = (
+        "You are an expert AI prompt engineer for Stable Diffusion XL (SDXL).\n"
+        "SDXL uses contrastive CLIP text encoders with a 77-token context limit, NOT large autoregressive language models (like T5-XXL).\n"
+        "Avoid long, novelistic, poetic paragraphs, flowery metaphors, or abstract storytelling filler (e.g. 'a sense of wonder', 'whispers of time'). "
+        "Every single word must directly describe visible elements in the image to prevent cross-attention dilution.\n"
+        "Also avoid collapsing into a single sparse sentence. Aim for the calibrated 'sweet spot':\n"
+        "Create a single unified, visually dense prompt (~35 to 55 words) describing core subject, action, attire, surroundings, framing, lighting, and camera specs."
+    )
+
+    PONY_UNIFIED_INSTRUCTIONS = (
+        "You are an expert AI prompt engineer specializing in Pony Diffusion SDXL (v6, v6.5, and realism fine-tunes).\n"
+        "CRITICAL ARCHITECTURAL REQUIREMENT - SCORE ANCHORS:\n"
+        "Pony Diffusion was trained on curated tag datasets using special aesthetic score tags. "
+        "To activate the high-quality photorealistic latent space, the prompt MUST begin with the mandatory anchor prefix:\n"
+        "  `score_9, score_8_up, score_7_up, source_photo, rating_safe`\n"
+        "(Note: Set rating_safe to rating_questionable or rating_explicit ONLY if the user prompt explicitly requests suggestive/mature/NSFW content).\n\n"
+        "Following the anchor prefix, provide a single unified prompt combining clean Danbooru tags for character, attire, and features, "
+        "along with photographic scene, camera, and lighting descriptors.\n\n"
+        "NEGATIVE PROMPT ANCHORING:\n"
+        "The negative prompt MUST start with:\n"
+        "  `score_4, score_5, score_6, score_1, score_2, score_3, source_anime, source_cartoon, source_furry, source_pony, 3d, render, illustration, drawing, painting`\n"
+        "Followed by common photographic defects: `bad anatomy, bad hands, missing fingers, extra digits, blurry, low quality, watermark`."
+    )
+
     PRESET_GUIDES = {
         "photorealistic": (
             "Focus on authentic realism and camera photography: natural skin/surface micro-textures, "
@@ -1400,6 +1424,7 @@ class MuseSparkSDXLExpander:
                         "clip_g prose + clip_l tags (recommended)",
                         "clip_g prose + clip_l prose",
                         "clip_g tags + clip_l tags",
+                        "unified (single prompt for both)",
                     ],
                     {"default": "clip_g prose + clip_l tags (recommended)"},
                 ),
@@ -1471,7 +1496,24 @@ class MuseSparkSDXLExpander:
         preset_guide = self.PRESET_GUIDES.get(preset, self.PRESET_GUIDES["photorealistic"])
         is_pony = (preset == "pony_realism")
 
-        if is_pony:
+        is_unified = (dual_format == "unified (single prompt for both)")
+
+        if is_unified:
+            if is_pony:
+                tag_count = "an extensive list of 40 to 70+ clean Danbooru character and attire tags (Long-CLIP enabled)" if long_clip_l else "clean Danbooru character and attire tags"
+                format_rule = (
+                    "PONY UNIFIED REQUIREMENT: The prompt MUST begin with the mandatory anchor prefix: "
+                    "'score_9, score_8_up, score_7_up, source_photo, rating_safe'. "
+                    f"Follow the anchor prefix with a unified combination of {tag_count}, "
+                    "along with photographic scene, camera, and lighting descriptors."
+                )
+            else:
+                prompt_length = "3 to 4 visually dense sentences or an extensive 40 to 70+ token description (Long-CLIP enabled)" if long_clip_l else "2 to 3 concise, visually dense sentences (~35-55 words)"
+                format_rule = (
+                    f"Format requirement: Generate a single unified, coherent, and highly descriptive prompt ({prompt_length}) "
+                    "combining subject appearance, scene environment, lighting, materials, and camera details without splitting into separate encoder sections."
+                )
+        elif is_pony:
             if dual_format == "clip_g prose + clip_l prose":
                 format_rule = (
                     "PONY DUAL ANCHORING REQUIREMENT: Both [PROMPT_G] and [PROMPT_L] MUST begin with the mandatory anchor prefix: "
@@ -1513,7 +1555,34 @@ class MuseSparkSDXLExpander:
                     f"[PROMPT_L] MUST be {tag_count}."
                 )
 
-        if is_pony:
+        if is_unified:
+            if is_pony:
+                format_structure = (
+                    "Strict Output Format:\n"
+                    "[PROMPT]\n"
+                    "score_9, score_8_up, score_7_up, source_photo, rating_safe, your unified prompt here\n"
+                    "[/PROMPT]\n"
+                )
+                if include_negative:
+                    format_structure += (
+                        "[NEGATIVE]\n"
+                        "score_4, score_5, score_6, score_1, score_2, score_3, source_anime, source_cartoon, source_furry, source_pony, 3d, render, illustration, drawing, painting, bad hands, blurry, ...\n"
+                        "[/NEGATIVE]\n"
+                    )
+            else:
+                format_structure = (
+                    "Strict Output Format:\n"
+                    "[PROMPT]\n"
+                    "your unified expanded prompt here\n"
+                    "[/PROMPT]\n"
+                )
+                if include_negative:
+                    format_structure += (
+                        "[NEGATIVE]\n"
+                        "your tailored SDXL negative prompt here\n"
+                        "[/NEGATIVE]\n"
+                    )
+        elif is_pony:
             format_structure = (
                 "Strict Output Format:\n"
                 "[PROMPT_G]\n"
@@ -1547,16 +1616,27 @@ class MuseSparkSDXLExpander:
                 )
         format_structure += "Do NOT include any conversational filler, notes, or markdown fences outside these tags."
 
+        if is_unified:
+            base_instructions = self.PONY_UNIFIED_INSTRUCTIONS if is_pony else self.SDXL_UNIFIED_INSTRUCTIONS
+        else:
+            base_instructions = self.PONY_SDXL_INSTRUCTIONS if is_pony else self.SDXL_DUAL_INSTRUCTIONS
+
         instructions_parts = [
-            self.PONY_SDXL_INSTRUCTIONS if is_pony else self.SDXL_DUAL_INSTRUCTIONS,
+            base_instructions,
             format_rule,
         ]
 
         if long_clip_l:
-            instructions_parts.append(
-                "Long-CLIP Architecture Enabled: The user is utilizing LongCLIP-L for OpenAI CLIP ViT-L with an expanded 248-token context window. "
-                "Do NOT restrict [PROMPT_L] to the standard 77-token ceiling. Freely expand [PROMPT_L] with rich, granular token details, materials, environment objects, lighting descriptors, and quality tags."
-            )
+            if is_unified:
+                instructions_parts.append(
+                    "Long-CLIP Architecture Enabled: The user is utilizing LongCLIP with an expanded 248-token context window. "
+                    "Do NOT restrict the prompt to the standard 77-token ceiling. Freely expand with rich, granular token details, materials, environment objects, lighting descriptors, and quality tags."
+                )
+            else:
+                instructions_parts.append(
+                    "Long-CLIP Architecture Enabled: The user is utilizing LongCLIP-L for OpenAI CLIP ViT-L with an expanded 248-token context window. "
+                    "Do NOT restrict [PROMPT_L] to the standard 77-token ceiling. Freely expand [PROMPT_L] with rich, granular token details, materials, environment objects, lighting descriptors, and quality tags."
+                )
 
         if images:
             instructions_parts.append(
