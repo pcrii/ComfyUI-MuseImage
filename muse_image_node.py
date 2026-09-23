@@ -791,16 +791,23 @@ class MuseSparkPromptExpander:
 
     SDXL_DUAL_INSTRUCTIONS = (
         "You are an expert AI prompt engineer specializing in Stable Diffusion XL (SDXL).\n"
-        "SDXL employs a dual text-encoder architecture consisting of two distinct models:\n"
-        "1. OpenCLIP ViT-bigG (CLIP-G / text_g): High-capacity encoder (1280 dim) that excels at natural language prose, visual context, "
-        "scene composition, atmosphere, lighting, camera angles, and aesthetic narrative. Write coherent English sentences without comma-separated tag lists.\n"
-        "2. OpenAI CLIP ViT-L (CLIP-L / text_l): Sensitive to specific concept tokens (768 dim), comma-separated keywords, Danbooru/booru tags, "
-        "clothing details, textures, and quality enhancers.\n\n"
+        "IMPORTANT ARCHITECTURAL CALIBRATION - DO NOT PROMPT LIKE T5-XXL OR FLUX:\n"
+        "SDXL uses contrastive CLIP text encoders with a 77-token context limit, NOT large autoregressive language models (like T5-XXL).\n"
+        "Avoid long, novelistic, poetic paragraphs, flowery metaphors, or abstract storytelling filler (e.g. 'a sense of wonder', 'whispers of time'). "
+        "Every single word must directly describe visible elements in the image to prevent cross-attention dilution.\n"
+        "Also avoid collapsing into a single sparse sentence. Aim for the calibrated 'sweet spot':\n\n"
+        "SDXL employs a dual text-encoder architecture:\n"
+        "1. OpenCLIP ViT-bigG (CLIP-G / text_g): High-capacity encoder (1280 dim). It excels at coherent natural prose for overall scene layout. "
+        "The ideal length is a balanced 2 to 3 concise, visually dense sentences (~35 to 55 words):\n"
+        "   - Sentence 1: Core subject, action, posture, and immediate physical presence.\n"
+        "   - Sentence 2: Environment, architectural/natural surroundings, framing, and depth of field.\n"
+        "   - Sentence 3: Lighting quality, atmospheric conditions, color palette, and photographic or artistic medium.\n"
+        "2. OpenAI CLIP ViT-L (CLIP-L / text_l): Sensitive to specific concept tokens (768 dim). "
+        "Format as 15 to 25 clean, comma-separated keywords and Danbooru-style detail tags emphasizing subject micro-details, "
+        "clothing, materials, facial features, camera/lens specs, and quality boosters (e.g. 35mm photo, sharp focus, intricate textures).\n\n"
         "Your task is to expand the user's idea into two synergistic prompts:\n"
-        "- [PROMPT_G]: Rich, descriptive natural language prose for CLIP-G describing the entire visual scene, "
-        "subject action/posture, composition, camera framing, lighting, color palette, and mood.\n"
-        "- [PROMPT_L]: Clean comma-separated tokens and tags for CLIP-L emphasizing specific subjects, "
-        "clothing, physical details, textures, and quality boosters (e.g. masterpiece, sharp focus, intricate details).\n"
+        "- [PROMPT_G]: Exactly 2 to 3 concise, visually dense English sentences for CLIP-G (35-55 words). Concrete visual nouns and lighting; zero fluff.\n"
+        "- [PROMPT_L]: 15 to 25 clean comma-separated tokens and detail tags for CLIP-L.\n"
     )
 
     PONY_SDXL_INSTRUCTIONS = (
@@ -1182,7 +1189,7 @@ class MuseSparkPromptExpander:
             else:
                 instructions_parts = [
                     self.SDXL_DUAL_INSTRUCTIONS,
-                    "Format requirement: [PROMPT_G] MUST be descriptive natural language prose for OpenCLIP bigG. [PROMPT_L] MUST be clean comma-separated tokens and detail tags for CLIP-L.",
+                    "Format requirement: [PROMPT_G] MUST be exactly 2 to 3 concise, visually dense sentences (35-55 words) describing subject, scene, and lighting for OpenCLIP bigG (avoid long novelistic paragraphs or single sparse sentences). [PROMPT_L] MUST be 15 to 25 clean comma-separated tokens and detail tags for CLIP-L.",
                 ]
             if images:
                 instructions_parts.append(
@@ -1322,20 +1329,7 @@ class MuseSparkSDXLExpander:
     - reasoning_summary: Model reasoning tokens or summary.
     """
 
-    SDXL_DUAL_INSTRUCTIONS = (
-        "You are an expert AI prompt engineer specializing in Stable Diffusion XL (SDXL).\n"
-        "SDXL employs a dual text-encoder architecture consisting of two distinct models:\n"
-        "1. OpenCLIP ViT-bigG (CLIP-G / text_g): High-capacity encoder (1280 dim) that excels at natural language prose, visual context, "
-        "scene composition, atmosphere, lighting, camera angles, and aesthetic narrative. Write coherent English sentences without comma-separated tag lists.\n"
-        "2. OpenAI CLIP ViT-L (CLIP-L / text_l): Sensitive to specific concept tokens (768 dim), comma-separated keywords, Danbooru/booru tags, "
-        "clothing details, textures, and quality enhancers.\n\n"
-        "Your task is to expand the user's idea into two synergistic prompts:\n"
-        "- [PROMPT_G]: Rich, descriptive natural language prose for CLIP-G describing the entire visual scene, "
-        "subject action/posture, composition, camera framing, lighting, color palette, and mood.\n"
-        "- [PROMPT_L]: Clean comma-separated tokens and tags for CLIP-L emphasizing specific subjects, "
-        "clothing, physical details, textures, and quality boosters (e.g. masterpiece, sharp focus, intricate details).\n"
-    )
-
+    SDXL_DUAL_INSTRUCTIONS = MuseSparkPromptExpander.SDXL_DUAL_INSTRUCTIONS
     PONY_SDXL_INSTRUCTIONS = MuseSparkPromptExpander.PONY_SDXL_INSTRUCTIONS
 
     PRESET_GUIDES = {
@@ -1490,18 +1484,18 @@ class MuseSparkSDXLExpander:
         else:
             if dual_format == "clip_g prose + clip_l prose":
                 format_rule = (
-                    "Format requirement: Both [PROMPT_G] and [PROMPT_L] should be rich, coherent natural language sentences. "
-                    "[PROMPT_G] should focus on scene context, lighting, and composition; [PROMPT_L] should focus on detailed subject appearance and action."
+                    "Format requirement: Both [PROMPT_G] and [PROMPT_L] should be 2 to 3 concise, visually dense sentences (35-55 words). "
+                    "[PROMPT_G] focuses on scene context, lighting, and composition; [PROMPT_L] focuses on detailed subject appearance and action. Avoid novelistic or poetic filler."
                 )
             elif dual_format == "clip_g tags + clip_l tags":
                 format_rule = (
-                    "Format requirement: Both [PROMPT_G] and [PROMPT_L] should be clean, comma-separated tokens and quality tags. "
+                    "Format requirement: Both [PROMPT_G] and [PROMPT_L] should be clean, comma-separated tokens and quality tags (15-25 tokens each). "
                     "[PROMPT_G] for high-level scene/style tags, [PROMPT_L] for subject, attire, and detail tags."
                 )
             else:
                 format_rule = (
-                    "Format requirement: [PROMPT_G] MUST be descriptive natural language prose for OpenCLIP bigG (no tag lists). "
-                    "[PROMPT_L] MUST be clean comma-separated tokens, booru tags, and detail keywords for OpenAI CLIP-L (no full sentences)."
+                    "Format requirement: [PROMPT_G] MUST be exactly 2 to 3 concise, visually dense sentences (~35-55 words) describing subject, scene, and lighting (avoid long novelistic paragraphs or single sparse sentences). "
+                    "[PROMPT_L] MUST be 15 to 25 clean comma-separated tokens, booru tags, and detail keywords for OpenAI CLIP-L (no full sentences)."
                 )
 
         if is_pony:
