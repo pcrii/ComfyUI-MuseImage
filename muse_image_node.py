@@ -724,6 +724,12 @@ class MuseSparkPromptExpander:
             "Focus on cinematic film aesthetics: dramatic anamorphic composition, widescreen framing, "
             "atmospheric haze or volumetric light, rich color grading, directional rim lighting, and emotional mood."
         ),
+        "pony_realism": (
+            "Focus on Pony SDXL photorealism with strict dual-anchoring: Both text encoders (CLIP-G and CLIP-L) "
+            "must begin with 'score_9, score_8_up, score_7_up, source_photo, rating_safe'. "
+            "After anchors, address CLIP-G with photographic scene/lighting tags and CLIP-L with Danbooru subject/attire tags, "
+            "paired with Pony's low-score reject negative anchors."
+        ),
         "digital_art / anime": (
             "Focus on high-end stylized digital art, concept art, or anime illustration: expressive line work, "
             "vibrant color palettes, painterly textures or clean cel shading, dynamic angles, and striking highlights."
@@ -795,6 +801,28 @@ class MuseSparkPromptExpander:
         "subject action/posture, composition, camera framing, lighting, color palette, and mood.\n"
         "- [PROMPT_L]: Clean comma-separated tokens and tags for CLIP-L emphasizing specific subjects, "
         "clothing, physical details, textures, and quality boosters (e.g. masterpiece, sharp focus, intricate details).\n"
+    )
+
+    PONY_SDXL_INSTRUCTIONS = (
+        "You are an expert AI prompt engineer specializing in Pony Diffusion SDXL (v6, v6.5, and realism fine-tunes).\n"
+        "CRITICAL ARCHITECTURAL REQUIREMENT - DUAL ANCHORING:\n"
+        "Pony Diffusion's text encoders (OpenCLIP ViT-bigG and OpenAI CLIP ViT-L) were extensively fine-tuned on "
+        "curated tag datasets using special aesthetic score tags. To activate the high-quality photorealistic latent space, "
+        "BOTH [PROMPT_G] and [PROMPT_L] MUST begin with the mandatory anchor prefix:\n"
+        "  `score_9, score_8_up, score_7_up, source_photo, rating_safe`\n"
+        "(Note: Set rating_safe to rating_questionable or rating_explicit ONLY if the user prompt explicitly requests suggestive/mature/NSFW content).\n\n"
+        "DUAL-ENCODER SPECIALIZATION AFTER THE ANCHORS:\n"
+        "- [PROMPT_G] (OpenCLIP ViT-bigG / text_g): Drives the global pooled scene vector, atmosphere, and composition. "
+        "After the anchor prefix, include photographic medium and scene descriptors, environment, camera/lens specifications, and lighting tags "
+        "(e.g., `realistic, photo, 35mm photograph, soft natural lighting, shallow depth of field, outdoor, city street, volumetric light`).\n"
+        "- [PROMPT_L] (OpenAI CLIP ViT-L / text_l): Drives fine token-by-token cross-attention for character, attire, and micro-details. "
+        "After the anchor prefix, format primarily as clean, comma-separated Danbooru/Booru tags for subject, hair, eye color, attire, posture, expressions, and physical micro-textures "
+        "(e.g., `1girl, solo, black hair, hazel eyes, trenchcoat, looking at viewer, detailed skin texture, micro details`).\n\n"
+        "NEGATIVE PROMPT DUAL ANCHORING:\n"
+        "Pony requires low-score and style-reject anchors in the negative prompt to discard illustrated and low-quality data clusters. "
+        "The negative prompt MUST start with:\n"
+        "  `score_4, score_5, score_6, score_1, score_2, score_3, source_anime, source_cartoon, source_furry, source_pony, 3d, render, illustration, drawing, painting`\n"
+        "Followed by common photographic defects: `bad anatomy, bad hands, missing fingers, extra digits, blurry, low quality, watermark`."
     )
 
     MINIMAX_H3_FL2VA_INSTRUCTIONS = (
@@ -906,6 +934,7 @@ class MuseSparkPromptExpander:
                     [
                         "photorealistic",
                         "cinematic",
+                        "pony_realism",
                         "digital_art / anime",
                         "general_expansion",
                         "minimax_h3_fl2va (first frame + audio guide)",
@@ -1105,30 +1134,56 @@ class MuseSparkPromptExpander:
             instructions = "\n\n".join(instructions_parts)
 
         elif is_sdxl_dual:
-            format_structure = (
-                "Strict Output Format:\n"
-                "[PROMPT_G]\n"
-                "your descriptive natural language prose for CLIP-G (OpenCLIP ViT-bigG) here\n"
-                "[/PROMPT_G]\n"
-                "[PROMPT_L]\n"
-                "your clean comma-separated tokens and detail tags for CLIP-L (OpenAI CLIP ViT-L) here\n"
-                "[/PROMPT_L]\n"
-            )
-            if include_negative:
-                format_structure += (
-                    "[NEGATIVE]\n"
-                    "your tailored SDXL negative prompt here\n"
-                    "[/NEGATIVE]\n"
+            is_pony = (preset == "pony_realism")
+            if is_pony:
+                format_structure = (
+                    "Strict Output Format:\n"
+                    "[PROMPT_G]\n"
+                    "score_9, score_8_up, score_7_up, source_photo, rating_safe, your descriptive scene composition, environment, camera, and photographic lighting here\n"
+                    "[/PROMPT_G]\n"
+                    "[PROMPT_L]\n"
+                    "score_9, score_8_up, score_7_up, source_photo, rating_safe, your clean comma-separated Danbooru tags for subject, hair, attire, and micro-details here\n"
+                    "[/PROMPT_L]\n"
                 )
+            else:
+                format_structure = (
+                    "Strict Output Format:\n"
+                    "[PROMPT_G]\n"
+                    "your descriptive natural language prose for CLIP-G (OpenCLIP ViT-bigG) here\n"
+                    "[/PROMPT_G]\n"
+                    "[PROMPT_L]\n"
+                    "your clean comma-separated tokens and detail tags for CLIP-L (OpenAI CLIP ViT-L) here\n"
+                    "[/PROMPT_L]\n"
+                )
+            if include_negative:
+                if is_pony:
+                    format_structure += (
+                        "[NEGATIVE]\n"
+                        "score_4, score_5, score_6, score_1, score_2, score_3, source_anime, source_cartoon, source_furry, source_pony, 3d, render, illustration, drawing, painting, bad anatomy, bad hands, blurry, ...\n"
+                        "[/NEGATIVE]\n"
+                    )
+                else:
+                    format_structure += (
+                        "[NEGATIVE]\n"
+                        "your tailored SDXL negative prompt here\n"
+                        "[/NEGATIVE]\n"
+                    )
             format_structure += "Do NOT include any conversational filler, notes, or markdown fences outside these tags."
 
             preset_guide = self.PRESET_GUIDES.get(
                 preset, self.PRESET_GUIDES["photorealistic"]
             )
-            instructions_parts = [
-                self.SDXL_DUAL_INSTRUCTIONS,
-                "Format requirement: [PROMPT_G] MUST be descriptive natural language prose for OpenCLIP bigG. [PROMPT_L] MUST be clean comma-separated tokens and detail tags for CLIP-L.",
-            ]
+            if is_pony:
+                instructions_parts = [
+                    self.PONY_SDXL_INSTRUCTIONS,
+                    "Format requirement: Both [PROMPT_G] and [PROMPT_L] MUST begin with the mandatory anchor prefix: 'score_9, score_8_up, score_7_up, source_photo, rating_safe'. "
+                    "Follow with specialized content: [PROMPT_G] for scene atmosphere, camera, and photographic lighting; [PROMPT_L] for clean Danbooru character, clothing, and micro-detail tags.",
+                ]
+            else:
+                instructions_parts = [
+                    self.SDXL_DUAL_INSTRUCTIONS,
+                    "Format requirement: [PROMPT_G] MUST be descriptive natural language prose for OpenCLIP bigG. [PROMPT_L] MUST be clean comma-separated tokens and detail tags for CLIP-L.",
+                ]
             if images:
                 instructions_parts.append(
                     f"Reference Image(s) Attached: You have received {len(images)} reference image(s). "
@@ -1145,10 +1200,17 @@ class MuseSparkPromptExpander:
                     instructions_parts.append(f"Additional instructions: {custom_instructions.strip()}")
 
             if include_negative:
-                instructions_parts.append(
-                    "Negative prompt guidance: Generate a tailored negative prompt for SDXL to suppress common artifacts, "
-                    "anatomical deformities, bad hands, blurriness, pixelation, watermarks, and unwanted styling."
-                )
+                if is_pony:
+                    instructions_parts.append(
+                        "Negative prompt guidance: For Pony realism, you MUST begin the negative prompt with the low-score and style-reject anchors: "
+                        "'score_4, score_5, score_6, score_1, score_2, score_3, source_anime, source_cartoon, source_furry, source_pony, 3d, render, illustration, drawing, painting', "
+                        "followed by photographic defect tags like 'bad anatomy, bad hands, blurry, low quality, watermark'."
+                    )
+                else:
+                    instructions_parts.append(
+                        "Negative prompt guidance: Generate a tailored negative prompt for SDXL to suppress common artifacts, "
+                        "anatomical deformities, bad hands, blurriness, pixelation, watermarks, and unwanted styling."
+                    )
             else:
                 instructions_parts.append(
                     "Negative prompt guidance: Do NOT output a negative prompt."
@@ -1274,6 +1336,8 @@ class MuseSparkSDXLExpander:
         "clothing, physical details, textures, and quality boosters (e.g. masterpiece, sharp focus, intricate details).\n"
     )
 
+    PONY_SDXL_INSTRUCTIONS = MuseSparkPromptExpander.PONY_SDXL_INSTRUCTIONS
+
     PRESET_GUIDES = {
         "photorealistic": (
             "Focus on authentic realism and camera photography: natural skin/surface micro-textures, "
@@ -1283,6 +1347,12 @@ class MuseSparkSDXLExpander:
         "cinematic": (
             "Focus on cinematic film aesthetics: dramatic anamorphic composition, widescreen framing, "
             "atmospheric haze or volumetric light, rich color grading, directional rim lighting, and emotional mood."
+        ),
+        "pony_realism": (
+            "Focus on Pony SDXL photorealism with strict dual-anchoring: Both text encoders (CLIP-G and CLIP-L) "
+            "must begin with 'score_9, score_8_up, score_7_up, source_photo, rating_safe'. "
+            "After anchors, address CLIP-G with photographic scene/lighting tags and CLIP-L with Danbooru subject/attire tags, "
+            "paired with Pony's low-score reject negative anchors."
         ),
         "anime / manga": (
             "Focus on anime and manga illustration aesthetics: expressive character design, dynamic framing, "
@@ -1314,6 +1384,7 @@ class MuseSparkSDXLExpander:
                     [
                         "photorealistic",
                         "cinematic",
+                        "pony_realism",
                         "anime / manga",
                         "digital_art / concept_art",
                         "general_expansion",
@@ -1393,42 +1464,82 @@ class MuseSparkSDXLExpander:
 
         images = _extract_images(reference_image, reference_images)
         preset_guide = self.PRESET_GUIDES.get(preset, self.PRESET_GUIDES["photorealistic"])
+        is_pony = (preset == "pony_realism")
 
-        if dual_format == "clip_g prose + clip_l prose":
-            format_rule = (
-                "Format requirement: Both [PROMPT_G] and [PROMPT_L] should be rich, coherent natural language sentences. "
-                "[PROMPT_G] should focus on scene context, lighting, and composition; [PROMPT_L] should focus on detailed subject appearance and action."
-            )
-        elif dual_format == "clip_g tags + clip_l tags":
-            format_rule = (
-                "Format requirement: Both [PROMPT_G] and [PROMPT_L] should be clean, comma-separated tokens and quality tags. "
-                "[PROMPT_G] for high-level scene/style tags, [PROMPT_L] for subject, attire, and detail tags."
-            )
+        if is_pony:
+            if dual_format == "clip_g prose + clip_l prose":
+                format_rule = (
+                    "PONY DUAL ANCHORING REQUIREMENT: Both [PROMPT_G] and [PROMPT_L] MUST begin with the mandatory anchor prefix: "
+                    "'score_9, score_8_up, score_7_up, source_photo, rating_safe'. "
+                    "Follow the prefix with coherent photographic scene and subject descriptions for both encoders."
+                )
+            elif dual_format == "clip_g tags + clip_l tags":
+                format_rule = (
+                    "PONY DUAL ANCHORING REQUIREMENT: Both [PROMPT_G] and [PROMPT_L] MUST begin with the mandatory anchor prefix: "
+                    "'score_9, score_8_up, score_7_up, source_photo, rating_safe'. "
+                    "Follow the prefix with clean comma-separated Danbooru tags for both encoders."
+                )
+            else:
+                format_rule = (
+                    "PONY DUAL ANCHORING REQUIREMENT: Both [PROMPT_G] and [PROMPT_L] MUST begin with the mandatory anchor prefix: "
+                    "'score_9, score_8_up, score_7_up, source_photo, rating_safe'. "
+                    "Then, address the two text encoders separately:\n"
+                    "- [PROMPT_G] (OpenCLIP ViT-bigG): Follow the anchor prefix with scene composition, environment, camera, and photographic lighting tags (e.g. realistic, 35mm photo, cinematic lighting, outdoor, bokeh).\n"
+                    "- [PROMPT_L] (OpenAI CLIP ViT-L): Follow the anchor prefix with clean comma-separated Danbooru/Booru tags for subject, hair, eyes, clothing, and micro-details."
+                )
         else:
-            format_rule = (
-                "Format requirement: [PROMPT_G] MUST be descriptive natural language prose for OpenCLIP bigG (no tag lists). "
-                "[PROMPT_L] MUST be clean comma-separated tokens, booru tags, and detail keywords for OpenAI CLIP-L (no full sentences)."
-            )
+            if dual_format == "clip_g prose + clip_l prose":
+                format_rule = (
+                    "Format requirement: Both [PROMPT_G] and [PROMPT_L] should be rich, coherent natural language sentences. "
+                    "[PROMPT_G] should focus on scene context, lighting, and composition; [PROMPT_L] should focus on detailed subject appearance and action."
+                )
+            elif dual_format == "clip_g tags + clip_l tags":
+                format_rule = (
+                    "Format requirement: Both [PROMPT_G] and [PROMPT_L] should be clean, comma-separated tokens and quality tags. "
+                    "[PROMPT_G] for high-level scene/style tags, [PROMPT_L] for subject, attire, and detail tags."
+                )
+            else:
+                format_rule = (
+                    "Format requirement: [PROMPT_G] MUST be descriptive natural language prose for OpenCLIP bigG (no tag lists). "
+                    "[PROMPT_L] MUST be clean comma-separated tokens, booru tags, and detail keywords for OpenAI CLIP-L (no full sentences)."
+                )
 
-        format_structure = (
-            "Strict Output Format:\n"
-            "[PROMPT_G]\n"
-            "your text for CLIP-G (OpenCLIP ViT-bigG) here\n"
-            "[/PROMPT_G]\n"
-            "[PROMPT_L]\n"
-            "your text for CLIP-L (OpenAI CLIP ViT-L) here\n"
-            "[/PROMPT_L]\n"
-        )
-        if include_negative:
-            format_structure += (
-                "[NEGATIVE]\n"
-                "your tailored SDXL negative prompt here\n"
-                "[/NEGATIVE]\n"
+        if is_pony:
+            format_structure = (
+                "Strict Output Format:\n"
+                "[PROMPT_G]\n"
+                "score_9, score_8_up, score_7_up, source_photo, rating_safe, your scene and photographic lighting descriptors for CLIP-G (OpenCLIP ViT-bigG) here\n"
+                "[/PROMPT_G]\n"
+                "[PROMPT_L]\n"
+                "score_9, score_8_up, score_7_up, source_photo, rating_safe, your clean Danbooru tags and subject details for CLIP-L (OpenAI CLIP ViT-L) here\n"
+                "[/PROMPT_L]\n"
             )
+            if include_negative:
+                format_structure += (
+                    "[NEGATIVE]\n"
+                    "score_4, score_5, score_6, score_1, score_2, score_3, source_anime, source_cartoon, source_furry, source_pony, 3d, render, illustration, drawing, painting, bad hands, blurry, ...\n"
+                    "[/NEGATIVE]\n"
+                )
+        else:
+            format_structure = (
+                "Strict Output Format:\n"
+                "[PROMPT_G]\n"
+                "your text for CLIP-G (OpenCLIP ViT-bigG) here\n"
+                "[/PROMPT_G]\n"
+                "[PROMPT_L]\n"
+                "your text for CLIP-L (OpenAI CLIP ViT-L) here\n"
+                "[/PROMPT_L]\n"
+            )
+            if include_negative:
+                format_structure += (
+                    "[NEGATIVE]\n"
+                    "your tailored SDXL negative prompt here\n"
+                    "[/NEGATIVE]\n"
+                )
         format_structure += "Do NOT include any conversational filler, notes, or markdown fences outside these tags."
 
         instructions_parts = [
-            self.SDXL_DUAL_INSTRUCTIONS,
+            self.PONY_SDXL_INSTRUCTIONS if is_pony else self.SDXL_DUAL_INSTRUCTIONS,
             format_rule,
         ]
 
@@ -1448,11 +1559,18 @@ class MuseSparkSDXLExpander:
                 instructions_parts.append(f"Additional instructions: {custom_instructions.strip()}")
 
         if include_negative:
-            instructions_parts.append(
-                "Negative prompt guidance: Generate a tailored negative prompt for SDXL to suppress common artifacts, "
-                "anatomical deformities, bad hands, extra limbs, blurriness, pixelation, watermarks, and signature tokens, "
-                "harmonized with the selected aesthetic."
-            )
+            if is_pony:
+                instructions_parts.append(
+                    "Negative prompt guidance: For Pony realism, you MUST begin the negative prompt with the low-score and style-reject anchors: "
+                    "'score_4, score_5, score_6, score_1, score_2, score_3, source_anime, source_cartoon, source_furry, source_pony, 3d, render, illustration, drawing, painting', "
+                    "followed by photographic defect tags like 'bad anatomy, bad hands, blurry, low quality, watermark'."
+                )
+            else:
+                instructions_parts.append(
+                    "Negative prompt guidance: Generate a tailored negative prompt for SDXL to suppress common artifacts, "
+                    "anatomical deformities, bad hands, extra limbs, blurriness, pixelation, watermarks, and signature tokens, "
+                    "harmonized with the selected aesthetic."
+                )
         else:
             instructions_parts.append(
                 "Negative prompt guidance: Do NOT output a negative prompt."

@@ -44,8 +44,8 @@ Engineered from the ground up for SDXL's dual text-encoder architecture:
   - `clip_g prose + clip_l tags (recommended)`: Generates rich, coherent natural language prose for **OpenCLIP ViT-bigG** (`text_g` focusing on overall scene, lighting, composition, and mood) while generating clean comma-separated tokens, booru tags, and detail keywords for **OpenAI CLIP ViT-L** (`text_l` focusing on specific subjects, clothing, textures, and quality boosters).
   - `clip_g prose + clip_l prose`: Coherent descriptive prose for both encoders.
   - `clip_g tags + clip_l tags`: Comma-separated tokens and quality tags for both encoders.
-- **`preset`**: `photorealistic`, `cinematic`, `anime / manga`, `digital_art / concept_art`, `general_expansion`, and `custom`.
-- **`include_negative`**: Enabled by default (`True`). Produces a tailored negative prompt suppressing SDXL artifacts, bad anatomy, blur, and distortion.
+- **`preset`**: `photorealistic`, `cinematic`, `pony_realism` (enforces Pony dual quality/source anchors on both encoders + Danbooru/negative reject anchors), `anime / manga`, `digital_art / concept_art`, `general_expansion`, and `custom`.
+- **`include_negative`**: Enabled by default (`True`). Produces a tailored negative prompt suppressing SDXL/Pony artifacts, bad anatomy, blur, and distortion.
 - **Outputs**:
   - `prompt_g`: Connects directly to `text_g` on `CLIPTextEncodeSDXL`.
   - `prompt_l`: Connects directly to `text_l` on `CLIPTextEncodeSDXL`.
@@ -63,7 +63,7 @@ The multi-architecture expander transforms brief ideas into rich prompts across 
   - `minimax_h3_fl2va (first frame + audio timeline)`: Keyframe alignment header + 3-section video/audio timeline (`integrated_multimodal_description`, `overall_soundscape`, `non_diegetic_music`).
   - `minimax_h3_ref2va (6-section multi-reference)`: MiniMax H3 6-section rewrite structure with `<Picture 1>`..`<Picture 9>` and `<Audio 1>`..`<Audio 3>`.
   - `minimax_h3 (video + audio timeline)`: Backwards-compatible alias for `fl2va`.
-- **`preset`**: Includes `photorealistic`, `cinematic`, `digital_art / anime`, `general_expansion`, `minimax_h3_fl2va (first frame + audio guide)`, `minimax_h3_ref2va (multi-reference r2v)`, `minimax_h3 (video + audio director)`, and `custom`.
+- **`preset`**: Includes `photorealistic`, `cinematic`, `pony_realism`, `digital_art / anime`, `general_expansion`, `minimax_h3_fl2va (first frame + audio guide)`, `minimax_h3_ref2va (multi-reference r2v)`, `minimax_h3 (video + audio director)`, and `custom`.
 - **`include_negative`**: Optional negative prompt generation (`False` by default for distilled/modern models).
 - **`seed`**: Standard ComfyUI seed widget with cache locking.
 - **`reference_image` / `reference_images`**: Ground prompt expansion in reference image features.
