@@ -45,6 +45,7 @@ Engineered from the ground up for SDXL's dual text-encoder architecture:
   - `clip_g prose + clip_l prose`: Coherent descriptive prose for both encoders.
   - `clip_g tags + clip_l tags`: Comma-separated tokens and quality tags for both encoders.
 - **`preset`**: `photorealistic`, `cinematic`, `pony_realism` (enforces Pony dual quality/source anchors on both encoders + Danbooru/negative reject anchors), `anime / manga`, `digital_art / concept_art`, `general_expansion`, and `custom`.
+- **`long_clip_l`**: Toggle for users pairing SDXL with LongCLIP-L (which expands CLIP-L context window from 77 to 248 tokens). When enabled, unlocks a rich 40 to 70+ tag budget for `prompt_l` without artificial truncation, while strictly preserving balanced 2–3 sentence (~35–55 words) prose for `prompt_g` (OpenCLIP bigG) to prevent attention dilution.
 - **`include_negative`**: Enabled by default (`True`). Produces a tailored negative prompt suppressing SDXL/Pony artifacts, bad anatomy, blur, and distortion.
 - **Outputs**:
   - `prompt_g`: Connects directly to `text_g` on `CLIPTextEncodeSDXL`.
@@ -63,6 +64,7 @@ The multi-architecture expander transforms brief ideas into rich prompts across 
   - `minimax_h3_fl2va (first frame + audio timeline)`: Keyframe alignment header + 3-section video/audio timeline (`integrated_multimodal_description`, `overall_soundscape`, `non_diegetic_music`).
   - `minimax_h3_ref2va (6-section multi-reference)`: MiniMax H3 6-section rewrite structure with `<Picture 1>`..`<Picture 9>` and `<Audio 1>`..`<Audio 3>`.
   - `minimax_h3 (video + audio timeline)`: Backwards-compatible alias for `fl2va`.
+- **`long_clip_l`**: Expands `prompt_l` token budget to 40 to 70+ tags when using SDXL dual-encoder mode with LongCLIP-L (248-token context window).
 - **`preset`**: Includes `photorealistic`, `cinematic`, `pony_realism`, `digital_art / anime`, `general_expansion`, `minimax_h3_fl2va (first frame + audio guide)`, `minimax_h3_ref2va (multi-reference r2v)`, `minimax_h3 (video + audio director)`, and `custom`.
 - **`include_negative`**: Optional negative prompt generation (`False` by default for distilled/modern models).
 - **`seed`**: Standard ComfyUI seed widget with cache locking.

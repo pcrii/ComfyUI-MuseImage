@@ -952,6 +952,7 @@ class MuseSparkPromptExpander:
                     {"default": "photorealistic"},
                 ),
                 "include_negative": ("BOOLEAN", {"default": False}),
+                "long_clip_l": ("BOOLEAN", {"default": False}),
                 "model": (
                     [
                         "muse-spark-1.3",
@@ -1002,6 +1003,7 @@ class MuseSparkPromptExpander:
         model: str,
         reasoning_effort: str,
         seed: int,
+        long_clip_l: bool = False,
         reference_image: torch.Tensor = None,
         reference_images: list = None,
         custom_instructions: str = None,
@@ -1181,16 +1183,23 @@ class MuseSparkPromptExpander:
                 preset, self.PRESET_GUIDES["photorealistic"]
             )
             if is_pony:
+                tag_req = "an extensive list of 40 to 70+ clean Danbooru character, clothing, and micro-detail tags (Long-CLIP enabled)" if long_clip_l else "clean Danbooru character, clothing, and micro-detail tags"
                 instructions_parts = [
                     self.PONY_SDXL_INSTRUCTIONS,
-                    "Format requirement: Both [PROMPT_G] and [PROMPT_L] MUST begin with the mandatory anchor prefix: 'score_9, score_8_up, score_7_up, source_photo, rating_safe'. "
-                    "Follow with specialized content: [PROMPT_G] for scene atmosphere, camera, and photographic lighting; [PROMPT_L] for clean Danbooru character, clothing, and micro-detail tags.",
+                    f"Format requirement: Both [PROMPT_G] and [PROMPT_L] MUST begin with the mandatory anchor prefix: 'score_9, score_8_up, score_7_up, source_photo, rating_safe'. "
+                    f"Follow with specialized content: [PROMPT_G] for scene atmosphere, camera, and photographic lighting; [PROMPT_L] for {tag_req}.",
                 ]
             else:
+                tag_req = "an extensive, detailed list of 40 to 70+ clean comma-separated tokens and Danbooru tags (utilizing the 248-token Long-CLIP window)" if long_clip_l else "15 to 25 clean comma-separated tokens and detail tags"
                 instructions_parts = [
                     self.SDXL_DUAL_INSTRUCTIONS,
-                    "Format requirement: [PROMPT_G] MUST be exactly 2 to 3 concise, visually dense sentences (35-55 words) describing subject, scene, and lighting for OpenCLIP bigG (avoid long novelistic paragraphs or single sparse sentences). [PROMPT_L] MUST be 15 to 25 clean comma-separated tokens and detail tags for CLIP-L.",
+                    f"Format requirement: [PROMPT_G] MUST be exactly 2 to 3 concise, visually dense sentences (35-55 words) describing subject, scene, and lighting for OpenCLIP bigG (avoid long novelistic paragraphs or single sparse sentences). [PROMPT_L] MUST be {tag_req} for CLIP-L.",
                 ]
+            if long_clip_l:
+                instructions_parts.append(
+                    "Long-CLIP Architecture Enabled: The user is utilizing LongCLIP-L for OpenAI CLIP ViT-L with an expanded 248-token context window. "
+                    "Do NOT restrict [PROMPT_L] to the standard 77-token ceiling. Freely expand [PROMPT_L] with rich, granular token details, materials, environment objects, lighting descriptors, and quality tags."
+                )
             if images:
                 instructions_parts.append(
                     f"Reference Image(s) Attached: You have received {len(images)} reference image(s). "
@@ -1395,6 +1404,7 @@ class MuseSparkSDXLExpander:
                     {"default": "clip_g prose + clip_l tags (recommended)"},
                 ),
                 "include_negative": ("BOOLEAN", {"default": True}),
+                "long_clip_l": ("BOOLEAN", {"default": False}),
                 "model": (
                     [
                         "muse-spark-1.3",
@@ -1445,6 +1455,7 @@ class MuseSparkSDXLExpander:
         model: str,
         reasoning_effort: str,
         seed: int,
+        long_clip_l: bool = False,
         reference_image: torch.Tensor = None,
         reference_images: list = None,
         custom_instructions: str = None,
@@ -1468,18 +1479,20 @@ class MuseSparkSDXLExpander:
                     "Follow the prefix with coherent photographic scene and subject descriptions for both encoders."
                 )
             elif dual_format == "clip_g tags + clip_l tags":
+                tag_count = "an extensive list of 40 to 70+ clean comma-separated Danbooru tags for CLIP-L (utilizing Long-CLIP 248-token budget) and clean tags for CLIP-G" if long_clip_l else "clean comma-separated Danbooru tags for both encoders"
                 format_rule = (
                     "PONY DUAL ANCHORING REQUIREMENT: Both [PROMPT_G] and [PROMPT_L] MUST begin with the mandatory anchor prefix: "
                     "'score_9, score_8_up, score_7_up, source_photo, rating_safe'. "
-                    "Follow the prefix with clean comma-separated Danbooru tags for both encoders."
+                    f"Follow the prefix with {tag_count}."
                 )
             else:
+                tag_count = "an extensive list of 40 to 70+ clean comma-separated Danbooru/Booru tags for subject, hair, eyes, clothing, and micro-details (utilizing the 248-token Long-CLIP budget; do NOT artificially truncate)" if long_clip_l else "clean comma-separated Danbooru/Booru tags for subject, hair, eyes, clothing, and micro-details"
                 format_rule = (
                     "PONY DUAL ANCHORING REQUIREMENT: Both [PROMPT_G] and [PROMPT_L] MUST begin with the mandatory anchor prefix: "
                     "'score_9, score_8_up, score_7_up, source_photo, rating_safe'. "
                     "Then, address the two text encoders separately:\n"
                     "- [PROMPT_G] (OpenCLIP ViT-bigG): Follow the anchor prefix with scene composition, environment, camera, and photographic lighting tags (e.g. realistic, 35mm photo, cinematic lighting, outdoor, bokeh).\n"
-                    "- [PROMPT_L] (OpenAI CLIP ViT-L): Follow the anchor prefix with clean comma-separated Danbooru/Booru tags for subject, hair, eyes, clothing, and micro-details."
+                    f"- [PROMPT_L] (OpenAI CLIP ViT-L): Follow the anchor prefix with {tag_count}."
                 )
         else:
             if dual_format == "clip_g prose + clip_l prose":
@@ -1488,14 +1501,16 @@ class MuseSparkSDXLExpander:
                     "[PROMPT_G] focuses on scene context, lighting, and composition; [PROMPT_L] focuses on detailed subject appearance and action. Avoid novelistic or poetic filler."
                 )
             elif dual_format == "clip_g tags + clip_l tags":
+                tag_count = "an extensive list of 40 to 70+ clean comma-separated tokens and quality tags for CLIP-L (Long-CLIP 248-token window) and 15 to 25 tags for CLIP-G" if long_clip_l else "15-25 tokens each"
                 format_rule = (
-                    "Format requirement: Both [PROMPT_G] and [PROMPT_L] should be clean, comma-separated tokens and quality tags (15-25 tokens each). "
+                    f"Format requirement: [PROMPT_G] and [PROMPT_L] should be clean, comma-separated tokens and quality tags ({tag_count}). "
                     "[PROMPT_G] for high-level scene/style tags, [PROMPT_L] for subject, attire, and detail tags."
                 )
             else:
+                tag_count = "an extensive list of 40 to 70+ clean comma-separated tokens, booru tags, and detail keywords for OpenAI CLIP-L (utilizing the 248-token Long-CLIP budget; do NOT artificially truncate)" if long_clip_l else "15 to 25 clean comma-separated tokens, booru tags, and detail keywords for OpenAI CLIP-L (no full sentences)"
                 format_rule = (
                     "Format requirement: [PROMPT_G] MUST be exactly 2 to 3 concise, visually dense sentences (~35-55 words) describing subject, scene, and lighting (avoid long novelistic paragraphs or single sparse sentences). "
-                    "[PROMPT_L] MUST be 15 to 25 clean comma-separated tokens, booru tags, and detail keywords for OpenAI CLIP-L (no full sentences)."
+                    f"[PROMPT_L] MUST be {tag_count}."
                 )
 
         if is_pony:
@@ -1536,6 +1551,12 @@ class MuseSparkSDXLExpander:
             self.PONY_SDXL_INSTRUCTIONS if is_pony else self.SDXL_DUAL_INSTRUCTIONS,
             format_rule,
         ]
+
+        if long_clip_l:
+            instructions_parts.append(
+                "Long-CLIP Architecture Enabled: The user is utilizing LongCLIP-L for OpenAI CLIP ViT-L with an expanded 248-token context window. "
+                "Do NOT restrict [PROMPT_L] to the standard 77-token ceiling. Freely expand [PROMPT_L] with rich, granular token details, materials, environment objects, lighting descriptors, and quality tags."
+            )
 
         if images:
             instructions_parts.append(
